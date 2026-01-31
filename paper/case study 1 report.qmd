@@ -1,11 +1,10 @@
 ---
 title: "Air Quality Analysis"
 subtitle: "Findings Reveal Vaccination and Healthcare Spending as Key Drivers of Mortality Reduction"
-author: 
-  - Junbo Li
+author:
+  - name: Junbo Li[^1]
 abstract: "123"
-thanks: "Code and data are available at: [https://github.com/Junbo345/Mortality_analysis](https://github.com/Junbo345/Mortality_analysis)."
-output: html
+format: html
 date: today
 date-format: long
 bibliography: references.bib
@@ -16,6 +15,7 @@ toc: true
 ## Quarto
 
 Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+[^1]: Code and data are available at: https://github.com/Junbo345/Mortality_analysis
 
 ## Running Code
 
