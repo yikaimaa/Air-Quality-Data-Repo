@@ -3,6 +3,7 @@ title: "Air Quality Analysis"
 subtitle: "Findings Reveal Vaccination and Healthcare Spending as Key Drivers of Mortality Reduction"
 author: 
   - Junbo Li
+abstract: "123"
 thanks: "Code and data are available at: [https://github.com/Junbo345/Mortality_analysis](https://github.com/Junbo345/Mortality_analysis)."
 output: html
 date: today
