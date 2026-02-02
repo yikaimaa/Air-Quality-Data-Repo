@@ -18,8 +18,10 @@ jobs:
       - name: Install uv
         run: pip install uv
 
-      - name: Install deps (if you have requirements.txt)
-        run: uv pip install -r requirements.txt
+      - name: Install deps
+        run: |
+          uv venv
+          uv pip install -r requirements.txt
 
       - name: Basic import check
         run: python -c "import numpy, pandas"
