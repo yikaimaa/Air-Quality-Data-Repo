@@ -1,4 +1,4 @@
-name: CI
+name: workflow_test
 
 on:
   push:
@@ -8,7 +8,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -24,13 +23,13 @@ jobs:
           uv venv
           uv pip install -r requirements.txt
 
-      - name: Basic import check
-        run: uv run python -c "import numpy, pandas, requests"
+      - name: Basic import check (no project build)
+        run: uv run --no-project python -c "import numpy, pandas, requests"
 
       - name: Build hourly PM2.5 (Ontario)
         run: |
           mkdir -p outputs
-          uv run python scripts/build_hourly_pm25.py \
+          uv run --no-project python scripts/build_hourly_pm25.py \
             --input-dir "Datasets/Ontario/PM25" \
             --out "outputs/pm25_hourly_wide_final.csv" \
             --out-station-lookup "outputs/station_lookup.csv"
