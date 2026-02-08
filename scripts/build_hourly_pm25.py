@@ -2,28 +2,33 @@
 # -*- coding: utf-8 -*-
 
 """
-Build Ontario hourly PM2.5 wide dataset (parse + station meta + de-dup) in a reproducible way.
+Build Ontario hourly PM2.5 wide dataset (parse + station meta + de-dup) reproducibly.
 
-Behavior:
+Key behaviors:
 - Prefer local repo files under --input-dir (default: Datasets/Ontario/PM25)
-- If a file is missing locally, fallback to GitHub raw URL base (--base-raw)
+- If missing locally, fallback to GitHub raw URL base (--base-raw)
 - Parse multi-block raw text files into a single hourly-wide table
 - Extract station metadata (Station ID, name, lat, lon) from the same raw text
 - Merge metadata into hourly data
 - Drop fully duplicated rows
 - Merge duplicate keys (Station ID, Pollutant, Date):
     * Non-conflict groups: complementary missingness -> fill missing hours
-    * Conflict groups: for each hour, if multiple unique values -> mean of uniques
-- Write outputs to CSV
+    * Conflict groups: same hour has different values -> take mean of UNIQUE values
+- Robust across pandas versions where groupby.apply may exclude grouping columns:
+    * We inject key columns from g.name before returning each merged row.
 
-Example:
-  python scripts/build_hourly_pm25.py --input-dir Datasets/Ontario/PM25 --out outputs/pm25_hourly_wide_final.csv
+Usage (GitHub Actions):
+  uv run --no-project python scripts/build_hourly_pm25.py \
+    --input-dir "Datasets/Ontario/PM25" \
+    --out "outputs/pm25_hourly_wide_final.csv" \
+    --out-station-lookup "outputs/station_lookup.csv"
 """
 
 from __future__ import annotations
 
 import argparse
 import re
+import sys
 from io import StringIO
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
@@ -46,7 +51,6 @@ DEFAULT_FILES = [
     "ON_PM25_2024-01-01_2024-12-31.csv",
 ]
 
-# Station meta pattern (as in your notebook)
 STATION_RE = re.compile(
     r"Station,\s*([^,]*?)\s*\((\d+)\).*?"
     r"Latitude,\s*([-\d.]+)\s*Longitude,\s*([-\d.]+)",
@@ -57,7 +61,7 @@ HOUR_COL_RE = re.compile(r"^H\d{2}$")
 
 
 # -------------------------
-# Small helpers
+# Utilities
 # -------------------------
 def log(msg: str) -> None:
     print(msg, flush=True)
@@ -76,10 +80,7 @@ def read_text_local_or_remote(
     base_raw: str,
     timeout: int,
 ) -> Tuple[str, str]:
-    """
-    Return (text, source_label).
-    Prefer local file; if missing, fetch from remote base_raw + fname.
-    """
+    """Return (text, source_label). Prefer local; else fetch from base_raw."""
     local_path = input_dir / fname
     if local_path.exists():
         text = local_path.read_text(encoding="utf-8", errors="replace")
@@ -96,13 +97,25 @@ def hour_cols_sorted(cols: Iterable[str]) -> List[str]:
     return sorted(hours, key=lambda x: int(str(x)[1:]))
 
 
+def groupby_apply_robust(gb, func):
+    """
+    Pandas compatibility:
+    - Newer pandas: apply(..., include_groups=False) avoids deprecation warning and future behavior changes
+    - Older pandas: include_groups not supported -> fallback
+    """
+    try:
+        return gb.apply(func, include_groups=False)
+    except TypeError:
+        return gb.apply(func)
+
+
 # -------------------------
-# Parsing: Ontario PM2.5 multi-block raw text
+# Parsing (hourly blocks)
 # -------------------------
 def parse_ontario_pm25_text(text: str, year: int) -> pd.DataFrame:
     """
-    Parse raw file that contains repeated blocks with a header line:
-      Station ID,Pollutant,Date,H01,...,H24
+    Parse the raw text file that contains repeated blocks with a header line:
+        Station ID,Pollutant,Date,H01,...,H24
     and data lines starting with digits (Station ID).
     """
     lines = text.splitlines()
@@ -115,7 +128,6 @@ def parse_ontario_pm25_text(text: str, year: int) -> pd.DataFrame:
     for line in lines:
         line = line.strip("\n")
 
-        # detect header for a block
         if line.startswith("Station ID,Pollutant,Date"):
             cols = [c.strip() for c in line.split(",") if c.strip() != ""]
             in_data = True
@@ -128,32 +140,19 @@ def parse_ontario_pm25_text(text: str, year: int) -> pd.DataFrame:
         if line.strip() == "":
             continue
 
-        # data line starts with "123,"
         if re.match(r"^\d{3,},", line):
             buf.append(line.rstrip().rstrip(","))
             continue
 
-        # boundary encountered: flush buffer
         if buf and cols:
-            df_chunk = pd.read_csv(
-                StringIO("\n".join(buf)),
-                header=None,
-                names=cols,
-                engine="python",
-            )
+            df_chunk = pd.read_csv(StringIO("\n".join(buf)), header=None, names=cols, engine="python")
             chunks.append(df_chunk)
 
         buf = []
         in_data = False
 
-    # flush if file ends while still in block
     if in_data and buf and cols:
-        df_chunk = pd.read_csv(
-            StringIO("\n".join(buf)),
-            header=None,
-            names=cols,
-            engine="python",
-        )
+        df_chunk = pd.read_csv(StringIO("\n".join(buf)), header=None, names=cols, engine="python")
         chunks.append(df_chunk)
 
     if not chunks:
@@ -165,7 +164,6 @@ def parse_ontario_pm25_text(text: str, year: int) -> pd.DataFrame:
     hour_cols = hour_cols_sorted(df.columns)
     if hour_cols:
         df[hour_cols] = df[hour_cols].apply(pd.to_numeric, errors="coerce")
-        # original dataset uses 9999 for missing
         df[hour_cols] = df[hour_cols].replace(9999, np.nan)
 
     if "Date" in df.columns:
@@ -176,7 +174,7 @@ def parse_ontario_pm25_text(text: str, year: int) -> pd.DataFrame:
 
 
 # -------------------------
-# Station metadata extraction
+# Station meta extraction
 # -------------------------
 def extract_station_meta(text: str) -> pd.DataFrame:
     records = []
@@ -194,8 +192,10 @@ def extract_station_meta(text: str) -> pd.DataFrame:
 
 def build_station_lookup(texts: List[str]) -> pd.DataFrame:
     meta_dfs = [extract_station_meta(t) for t in texts]
-    station_lookup = pd.concat(meta_dfs, ignore_index=True) if meta_dfs else pd.DataFrame(
-        columns=["Station ID", "station_name", "latitude", "longitude"]
+    station_lookup = (
+        pd.concat(meta_dfs, ignore_index=True)
+        if meta_dfs
+        else pd.DataFrame(columns=["Station ID", "station_name", "latitude", "longitude"])
     )
 
     if station_lookup.empty:
@@ -211,7 +211,7 @@ def build_station_lookup(texts: List[str]) -> pd.DataFrame:
 
 
 # -------------------------
-# De-dup logic
+# De-duplication logic
 # -------------------------
 def drop_fully_duplicated_rows(df: pd.DataFrame) -> pd.DataFrame:
     before = df.shape[0]
@@ -229,8 +229,12 @@ def drop_fully_duplicated_rows(df: pd.DataFrame) -> pd.DataFrame:
 def merge_key_duplicates(df0: pd.DataFrame, key: List[str]) -> pd.DataFrame:
     """
     Merge duplicates by key:
-      - non-conflict groups (complement-only): fill missing hour values
-      - conflict groups: per hour, if multiple unique non-missing values -> mean of uniques
+    - non-conflict groups: complementary missingness -> fill missing hours
+    - conflict groups: for each hour col, if >1 unique values -> mean of UNIQUE values
+
+    IMPORTANT robustness fix:
+    - groupby.apply may exclude grouping columns in newer pandas.
+    - We always inject key values from g.name into the returned Series.
     """
     df = df0.copy()
 
@@ -238,7 +242,6 @@ def merge_key_duplicates(df0: pd.DataFrame, key: List[str]) -> pd.DataFrame:
     if not hour_cols:
         raise ValueError("No hour columns found matching H\\d{2} (e.g., H01..H24).")
 
-    # normalize sentinels
     df[hour_cols] = df[hour_cols].replace([-999, 9999], np.nan)
 
     dup_mask = df.duplicated(subset=key, keep=False)
@@ -249,15 +252,20 @@ def merge_key_duplicates(df0: pd.DataFrame, key: List[str]) -> pd.DataFrame:
         log("[INFO] No duplicated keys found. Skip merge_key_duplicates.")
         return df.sort_values(key).reset_index(drop=True)
 
+    def _inject_group_key(row: pd.Series, group_name) -> pd.Series:
+        # group_name is the group key tuple in the same order as `key`
+        if not isinstance(group_name, tuple):
+            group_name = (group_name,)
+        for k, v in zip(key, group_name):
+            row[k] = v
+        return row
+
     def is_conflict_group(g: pd.DataFrame) -> bool:
         nunq = g[hour_cols].apply(lambda s: s.dropna().nunique(), axis=0)
         return (nunq > 1).any()
 
-    conflict_flag = (
-        df_dup.groupby(key, dropna=False, group_keys=False)
-        .apply(is_conflict_group)
-        .reset_index(name="is_conflict")
-    )
+    gb = df_dup.groupby(key, dropna=False, group_keys=False)
+    conflict_flag = groupby_apply_robust(gb, is_conflict_group).reset_index(name="is_conflict")
 
     conflict_keys = conflict_flag.loc[conflict_flag["is_conflict"], key].drop_duplicates()
     non_conflict_keys = conflict_flag.loc[~conflict_flag["is_conflict"], key].drop_duplicates()
@@ -277,7 +285,8 @@ def merge_key_duplicates(df0: pd.DataFrame, key: List[str]) -> pd.DataFrame:
             missing = base[hour_cols].isna() & row[hour_cols].notna()
             idx = missing.index[missing]
             base.loc[idx] = row.loc[idx]
-        return base
+
+        return _inject_group_key(base, g.name)
 
     def merge_conflict_group(g: pd.DataFrame) -> pd.Series:
         gg = g.copy()
@@ -285,7 +294,6 @@ def merge_key_duplicates(df0: pd.DataFrame, key: List[str]) -> pd.DataFrame:
         gg = gg.loc[valid_cnt.sort_values(ascending=False).index]
         out = gg.iloc[0].copy()
 
-        # fill meta columns if missing
         meta_cols = [c for c in gg.columns if c not in hour_cols]
         for c in meta_cols:
             if pd.isna(out.get(c, np.nan)):
@@ -293,12 +301,12 @@ def merge_key_duplicates(df0: pd.DataFrame, key: List[str]) -> pd.DataFrame:
                 if len(non_na) > 0:
                     out[c] = non_na.iloc[0]
 
-        # resolve hour conflicts
         for h in hour_cols:
             vals = gg[h].dropna()
             if vals.empty:
                 out[h] = np.nan
                 continue
+
             uniq = pd.unique(vals)
             if len(uniq) == 1:
                 out[h] = uniq[0]
@@ -306,23 +314,23 @@ def merge_key_duplicates(df0: pd.DataFrame, key: List[str]) -> pd.DataFrame:
                 uniq_num = pd.to_numeric(pd.Series(uniq), errors="coerce").dropna().values
                 out[h] = float(np.mean(uniq_num)) if len(uniq_num) else np.nan
 
-        return out
+        return _inject_group_key(out, g.name)
 
     merged_non_conflict = pd.DataFrame()
     if not non_conflict_keys.empty:
         df_dup_non_conflict = df_dup.merge(non_conflict_keys, on=key, how="inner")
+        gb_nc = df_dup_non_conflict.groupby(key, dropna=False, group_keys=False)
         merged_non_conflict = (
-            df_dup_non_conflict.groupby(key, dropna=False, group_keys=False)
-            .apply(merge_no_conflict_group)
+            groupby_apply_robust(gb_nc, merge_no_conflict_group)
             .reset_index(drop=True)
         )
 
     merged_conflict = pd.DataFrame()
     if not conflict_keys.empty:
         df_dup_conflict = df_dup.merge(conflict_keys, on=key, how="inner")
+        gb_c = df_dup_conflict.groupby(key, dropna=False, group_keys=False)
         merged_conflict = (
-            df_dup_conflict.groupby(key, dropna=False, group_keys=False)
-            .apply(merge_conflict_group)
+            groupby_apply_robust(gb_c, merge_conflict_group)
             .reset_index(drop=True)
         )
 
@@ -334,67 +342,38 @@ def merge_key_duplicates(df0: pd.DataFrame, key: List[str]) -> pd.DataFrame:
 
     remaining = out.duplicated(subset=key, keep=False).sum()
     if remaining != 0:
-        raise RuntimeError(
-            f"De-duplication failed: duplicate keys remain after merge (rows={remaining})."
-        )
+        raise RuntimeError(f"De-duplication failed: duplicate keys remain after merge (rows={remaining}).")
+
     return out
 
 
 # -------------------------
-# Main
+# Main pipeline
 # -------------------------
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Build Ontario hourly PM2.5 wide dataset (parse + station meta + de-dup)."
     )
-    ap.add_argument(
-        "--input-dir",
-        type=str,
-        default=str(DEFAULT_INPUT_DIR),
-        help="Local directory containing raw files (preferred for reproducibility).",
-    )
-    ap.add_argument(
-        "--base-raw",
-        type=str,
-        default=DEFAULT_BASE_RAW,
-        help="Remote GitHub raw base URL (used only if local files are missing).",
-    )
-    ap.add_argument(
-        "--files",
-        nargs="*",
-        default=DEFAULT_FILES,
-        help="List of filenames to process.",
-    )
-    ap.add_argument(
-        "--timeout",
-        type=int,
-        default=60,
-        help="Request timeout seconds (only used for remote fetch).",
-    )
-    ap.add_argument(
-        "--out",
-        type=str,
-        default="outputs/pm25_hourly_wide_final.csv",
-        help="Output CSV path for final hourly wide dataset.",
-    )
-    ap.add_argument(
-        "--out-station-lookup",
-        type=str,
-        default="outputs/station_lookup.csv",
-        help="Output CSV path for station lookup table.",
-    )
-    ap.add_argument(
-        "--keep-year",
-        action="store_true",
-        help="Keep helper column 'year' in the final output.",
-    )
+    ap.add_argument("--input-dir", type=str, default=str(DEFAULT_INPUT_DIR))
+    ap.add_argument("--base-raw", type=str, default=DEFAULT_BASE_RAW)
+    ap.add_argument("--files", nargs="*", default=DEFAULT_FILES)
+    ap.add_argument("--timeout", type=int, default=60)
+    ap.add_argument("--out", type=str, default="outputs/pm25_hourly_wide_final.csv")
+    ap.add_argument("--out-station-lookup", type=str, default="outputs/station_lookup.csv")
+    ap.add_argument("--keep-year", action="store_true")
 
-    args = ap.parse_args()
+    # Colab/Jupyter safe parsing: ignore notebook-injected args, but keep strict in CLI
+    args, unknown = ap.parse_known_args()
+    is_notebook = ("ipykernel" in sys.modules) or ("google.colab" in sys.modules)
+    if unknown:
+        if is_notebook:
+            log(f"[INFO] Ignoring notebook args: {unknown}")
+        else:
+            ap.error(f"unrecognized arguments: {' '.join(unknown)}")
 
     input_dir = Path(args.input_dir)
     out_path = Path(args.out)
     out_station = Path(args.out_station_lookup)
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_station.parent.mkdir(parents=True, exist_ok=True)
 
@@ -403,12 +382,7 @@ def main() -> None:
 
     for f in args.files:
         year = infer_year_from_filename(f)
-        text, src = read_text_local_or_remote(
-            fname=f,
-            input_dir=input_dir,
-            base_raw=args.base_raw,
-            timeout=args.timeout,
-        )
+        text, src = read_text_local_or_remote(f, input_dir, args.base_raw, args.timeout)
         log(f"[INFO] loaded {f} ({src})")
         texts.append(text)
 
@@ -426,25 +400,21 @@ def main() -> None:
     station_lookup = build_station_lookup(texts)
     log(f"[INFO] station_lookup rows: {len(station_lookup):,}")
 
-    # Normalize Station ID
     if "Station ID" in pm25_all.columns:
         pm25_all["Station ID"] = pd.to_numeric(pm25_all["Station ID"], errors="coerce").astype("Int64")
     if not station_lookup.empty and "Station ID" in station_lookup.columns:
         station_lookup["Station ID"] = pd.to_numeric(station_lookup["Station ID"], errors="coerce").astype("Int64")
 
-    # Merge station meta
     if station_lookup.empty:
-        log("[WARN] station_lookup is empty -> output will not have station_name/latitude/longitude")
+        log("[WARN] station_lookup is empty -> output will not have station_name/lat/lon")
         pm25_hourly_wide = pm25_all.copy()
     else:
         pm25_hourly_wide = pm25_all.merge(station_lookup, on="Station ID", how="left")
 
     log(f"[INFO] merged hourly wide shape: {pm25_hourly_wide.shape}")
 
-    # Drop fully duplicated
     pm25_hourly_wide_nofulldup = drop_fully_duplicated_rows(pm25_hourly_wide)
 
-    # Merge key duplicates
     key = ["Station ID", "Pollutant", "Date"]
     for k in key:
         if k not in pm25_hourly_wide_nofulldup.columns:
@@ -452,16 +422,14 @@ def main() -> None:
 
     pm25_hourly_wide_final = merge_key_duplicates(pm25_hourly_wide_nofulldup, key=key)
 
-    if (not args.keep_year) and ("year" in pm25_hourly_wide_final.columns):
+    if not args.keep_year and "year" in pm25_hourly_wide_final.columns:
         pm25_hourly_wide_final = pm25_hourly_wide_final.drop(columns=["year"])
 
-    # Reorder columns (nice layout)
     hour_cols = hour_cols_sorted(pm25_hourly_wide_final.columns)
     meta_cols = [c for c in ["Station ID", "Pollutant", "Date", "station_name", "latitude", "longitude"] if c in pm25_hourly_wide_final.columns]
     other_cols = [c for c in pm25_hourly_wide_final.columns if c not in set(meta_cols + hour_cols)]
     pm25_hourly_wide_final = pm25_hourly_wide_final[meta_cols + other_cols + hour_cols]
 
-    # Final check
     remaining = pm25_hourly_wide_final.duplicated(subset=key, keep=False).sum()
     if remaining != 0:
         raise RuntimeError(f"Unexpected duplicate keys remain at end (rows={remaining}).")
