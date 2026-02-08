@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install deps
+        run: |
+          uv venv
+          uv pip install -r requirements.txt
+
+      - name: Basic import check
+        run: uv run python -c "import numpy, pandas"
+
+      # 1) build hourly (and panel)
+      - name: Build hourly PM2.5
+        run: |
+          uv run python scripts/build_hourly_pm25.py --make-panel
+
+      # 2) build daily from hourly
+      - name: Build daily PM2.5
+        run: |
+          uv run python scripts/build_daily_pm25.py \
+            --in-hourly data/processed/pm25_hourly_wide_final.csv \
+            --out-daily data/processed/pm25_daily_cleaned.csv \
+            --min-hours 15
+
+      # 3) run EDA outputs to paper/eda
+      - name: Generate EDA figures & tables
+        run: |
+          uv run python scripts/run_eda_paper.py \
+            --outdir paper/eda \
+            --formats png
+
+      # Optional but very useful: upload outputs so you can download from the CI run
+      - name: Upload outputs (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-outputs
+          path: |
+            data/processed/**
+            paper/eda/**
