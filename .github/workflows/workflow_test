@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Create venv + install deps
+        run: |
+          uv venv
+          uv pip install -r requirements.txt
+
+      - name: Basic import check
+        run: uv run python -c "import numpy, pandas, requests"
+
+      - name: Build hourly PM2.5 (Ontario)
+        run: |
+          mkdir -p outputs
+          uv run python scripts/build_hourly_pm25.py \
+            --input-dir "Datasets/Ontario/PM25" \
+            --out "outputs/pm25_hourly_wide_final.csv" \
+            --out-station-lookup "outputs/station_lookup.csv"
+
+      - name: Sanity check outputs exist
+        run: |
+          test -s outputs/pm25_hourly_wide_final.csv
+          test -s outputs/station_lookup.csv
