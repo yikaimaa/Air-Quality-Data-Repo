@@ -38,3 +38,13 @@ jobs:
         run: |
           test -s outputs/pm25_hourly_wide_final.csv
           test -s outputs/station_lookup.csv
+
+      - name: Build daily PM2.5
+        run: |
+          mkdir -p outputs
+          uv run --no-project python scripts/build_daily_pm25.py \
+            --in "outputs/pm25_hourly_wide_final.csv" \
+            --out "outputs/pm25_daily.csv" \
+            --min-hours 0
+
+
