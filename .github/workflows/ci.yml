@@ -41,7 +41,6 @@ jobs:
             --out outputs/pm25_daily_cleaned.csv \
             --min-hours 15
 
-      # 可选：把 outputs/ 作为 CI 产物保存，方便你在 Actions 页面下载查看
       - name: Upload outputs artifact
         uses: actions/upload-artifact@v4
         with:
