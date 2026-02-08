@@ -1,0 +1,17 @@
+{
+  "base_raw": "https://raw.githubusercontent.com/yikaimaa/Air-Quality-Data-Repo/main/Datasets/Ontario/PM25/",
+  "files": [
+    "ON_PM25_2020-01-01_2020-12-31.csv",
+    "ON_PM25_2021-01-01_2021-12-31.csv",
+    "ON_PM25_2022-01-01_2022-12-31.csv",
+    "ON_PM25_2023-01-01_2023-12-31.csv",
+    "ON_PM25_2024-01-01_2024-12-31.csv"
+  ],
+  "panel": {
+    "start_date": "2020-01-01",
+    "end_date": "2024-12-31"
+  },
+  "daily": {
+    "min_hours": 15
+  }
+}
