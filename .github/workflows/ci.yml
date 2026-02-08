@@ -26,3 +26,11 @@ jobs:
       - name: Basic import check
         run: uv run python -c "import numpy, pandas"
 
+      - name: Run pipeline
+        run: |
+          uv run python "scripts/build hourly pm25.py"
+          uv run python "scripts/build daily pm25.py"
+
+      - name: Basic import check
+        run: uv run python -c "import numpy, pandas"
+
