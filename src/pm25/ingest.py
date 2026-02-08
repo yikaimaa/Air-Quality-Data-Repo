@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 
 import re
 from io import StringIO
@@ -58,10 +59,12 @@ def parse_ontario_pm25_text(text: str, year: int) -> pd.DataFrame:
     return df
 
 
-def fetch_text(url: str, timeout: int = 60) -> str:
-    r = requests.get(url, timeout=timeout)
-    r.raise_for_status()
-    return r.text
+def fetch_text(path_or_url: str, timeout: int = 60) -> str:
+    if path_or_url.startswith(("http://", "https://")):
+        r = requests.get(path_or_url, timeout=timeout)
+        r.raise_for_status()
+        return r.text
+    return Path(path_or_url).read_text(encoding="utf-8")
 
 
 def load_years(base_raw: str, files: Iterable[str]) -> pd.DataFrame:
