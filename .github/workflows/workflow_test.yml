@@ -48,10 +48,13 @@ jobs:
             --min-hours 0 \
             --require-region
 
-      - name: Upload outputs as artifact
+      - name: Output PM2.5 artifact
         uses: actions/upload-artifact@v4
         with:
           name: pm25_outputs
-          path: outputs/*.csv
+          path: |
+            outputs/pm25_hourly_wide_final.csv
+            outputs/pm25_daily.csv
+          if-no-files-found: error
 
 
