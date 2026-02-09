@@ -45,7 +45,8 @@ jobs:
           uv run --no-project python scripts/build_daily_pm25.py \
             --in "outputs/pm25_hourly_wide_final.csv" \
             --out "outputs/pm25_daily.csv" \
-            --min-hours 0
+            --min-hours 0 \
+            --require-region
 
       - name: Upload outputs as artifact
         uses: actions/upload-artifact@v4
