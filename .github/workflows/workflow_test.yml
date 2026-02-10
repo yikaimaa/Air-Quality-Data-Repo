@@ -51,10 +51,40 @@ jobs:
         run: |
           test -s outputs/pm25_daily_region.csv
 
-      - name: Output PM2.5 artifact (region daily)
+      # ------------------ NEW: weather scripts ------------------
+
+      - name: Build weather station lat/lon lookup
+        run: |
+          mkdir -p outputs
+          uv run --no-project python scripts/build_weather_station_longlat.py \
+            --weather "Datasets/Ontario/ON_weather_daily_merged_2020-2025_clean.csv" \
+            --out "outputs/weather_stations_latlon.csv"
+
+      - name: Sanity check weather lat/lon output exists
+        run: |
+          test -s outputs/weather_stations_latlon.csv
+
+      - name: Build weather station -> region lookup (nearest PM2.5 station)
+        run: |
+          mkdir -p outputs
+          uv run --no-project python scripts/build_weather_station_region_lookup.py \
+            --pm25-lookup "Datasets/Ontario/pm25_station_region_lookup.csv" \
+            --weather-latlon "outputs/weather_stations_latlon.csv" \
+            --out "outputs/weather_station_region_lookup_nn.csv" \
+            --threshold-km 75
+
+      - name: Sanity check weather station-region lookup exists
+        run: |
+          test -s outputs/weather_station_region_lookup_nn.csv
+
+      # ------------------ artifacts ------------------
+
+      - name: Output artifacts (pm25 + weather lookups)
         uses: actions/upload-artifact@v4
         with:
-          name: pm25_outputs
+          name: data_outputs
           path: |
             outputs/pm25_daily_region.csv
+            outputs/weather_stations_latlon.csv
+            outputs/weather_station_region_lookup_nn.csv
           if-no-files-found: error
