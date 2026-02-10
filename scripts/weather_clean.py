@@ -1,8 +1,11 @@
+import argparse
 import re
-import numpy as np
-import pandas as pd
+import zipfile
 from pathlib import Path
 from typing import List, Optional, Dict, Union
+
+import numpy as np
+import pandas as pd
 
 
 # -----------------------------
@@ -54,27 +57,10 @@ def apply_range_check(df: pd.DataFrame, col: str, lo: float, hi: float) -> pd.Da
 
 
 def dedupe_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Handle duplicate column names:
-    - If duplicate names exist (e.g., repeated 'year'), keep the *last* occurrence
-      (often the later computed / more reliable one).
-    - This is a robust approach that minimizes accidental data loss.
-    """
+    """Keep the last occurrence if duplicate column names exist (parquet-safe)."""
     if df.columns.duplicated().any():
-        # Drop columns where duplicated(keep="last") is True, i.e., keep the last duplicate
         df = df.loc[:, ~df.columns.duplicated(keep="last")]
     return df
-
-
-def safe_to_parquet(df: pd.DataFrame, path: Path) -> str:
-    """
-    Safely write parquet: return the error message if it fails (do not raise).
-    """
-    try:
-        df.to_parquet(path, index=False)
-        return ""
-    except Exception as e:
-        return str(e)
 
 
 def compute_station_missing_rates(
@@ -114,25 +100,34 @@ def compute_station_missing_rates(
     return out
 
 
+def zip_single_file(src: Path, zip_path: Path) -> None:
+    """Create a zip containing only the file (no parent directories)."""
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.write(src, arcname=src.name)
+
+
 # -----------------------------
 # 2) Main cleaning pipeline
 # -----------------------------
 def clean_weather_daily(
     input_csv: Union[str, Path],
-    output_dir: Union[str, Path],
+    output_csv: Union[str, Path],
+    output_missing_csv: Optional[Union[str, Path]] = None,
     drop_flag_columns: bool = True,
 ) -> Dict:
     input_csv = Path(input_csv)
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_csv = Path(output_csv)
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+
+    if output_missing_csv is not None:
+        output_missing_csv = Path(output_missing_csv)
+        output_missing_csv.parent.mkdir(parents=True, exist_ok=True)
 
     df = pd.read_csv(input_csv, low_memory=False)
 
     # Standardize column names
-    rename_map = {c: to_snake_case(c) for c in df.columns}
-    df = df.rename(columns=rename_map)
-
-    # Dedupe once early (prevents Year/year collisions turning into duplicated columns)
+    df = df.rename(columns={c: to_snake_case(c) for c in df.columns})
     df = dedupe_columns(df)
 
     # Clean station_name / climate_id
@@ -140,23 +135,18 @@ def clean_weather_daily(
         df["station_name"] = df["station_name"].astype("string").str.strip()
 
     if "climate_id" in df.columns:
-        df["climate_id"] = (
-            df["climate_id"].astype("string").str.strip().str.replace(r"\.0$", "", regex=True)
-        )
+        df["climate_id"] = df["climate_id"].astype("string").str.strip().str.replace(r"\.0$", "", regex=True)
 
-    # Date fields: if date_time exists, use it to rebuild year/month/day
+    # Date fields
     if "date_time" in df.columns:
         df["date_time"] = pd.to_datetime(df["date_time"], errors="coerce")
         df["date"] = df["date_time"].dt.date
-
-        # Use assign to avoid weird duplicate-column behavior
         df = df.assign(
             year=df["date_time"].dt.year,
             month=df["date_time"].dt.month,
             day=df["date_time"].dt.day,
         )
 
-    # Dedupe again to ensure 'year' is unique
     df = dedupe_columns(df)
 
     # Coerce numeric columns
@@ -171,11 +161,11 @@ def clean_weather_daily(
     ]
     df = coerce_numeric(df, numeric_cols)
 
-    # Convert max gust direction from 10s-of-degrees to degrees
+    # Gust direction conversion
     if "dir_of_max_gust_10s_deg" in df.columns:
         df["dir_of_max_gust_deg"] = (df["dir_of_max_gust_10s_deg"] * 10.0) % 360
 
-    # Convert flag columns into indicator variables
+    # Flag -> indicators
     flag_pairs = [
         ("max_temp_degc", "max_temp_flag"),
         ("min_temp_degc", "min_temp_flag"),
@@ -192,11 +182,11 @@ def clean_weather_daily(
     for val_col, flg_col in flag_pairs:
         df = flag_to_indicators(df, val_col, flg_col)
 
-    # Simplify data_quality into a binary marker
+    # data_quality marker
     if "data_quality" in df.columns:
         df["data_quality_has_mark"] = df["data_quality"].notna().astype("int8")
 
-    # Physical range checks (outliers -> NaN + outlier flag)
+    # Range checks
     df = apply_range_check(df, "max_temp_degc", lo=-60, hi=50)
     df = apply_range_check(df, "min_temp_degc", lo=-60, hi=50)
     df = apply_range_check(df, "mean_temp_degc", lo=-60, hi=50)
@@ -209,7 +199,7 @@ def clean_weather_daily(
     df = apply_range_check(df, "spd_of_max_gust_km_h", lo=0, hi=250)
     df = apply_range_check(df, "dir_of_max_gust_deg", lo=0, hi=359.999)
 
-    # Deduplicate by primary key
+    # Deduplicate by station_id + date
     deduped = 0
     if "station_id" in df.columns and "date" in df.columns:
         before = len(df)
@@ -217,75 +207,100 @@ def clean_weather_daily(
         df = df.drop_duplicates(subset=["station_id", "date"], keep="first")
         deduped = before - len(df)
 
-    # Drop original flag columns if requested
+    # Drop raw flag columns
     if drop_flag_columns:
         df = df.drop(columns=[c for c in df.columns if c.endswith("_flag")], errors="ignore")
 
-    # Final dedupe of columns (parquet safety)
     df = dedupe_columns(df)
 
-    # -----------------------------
-    # Station-level missing rate summary
-    # -----------------------------
-    cols_for_missing = [
-        "date_time",
-        "longitude_x", "latitude_y",
-        "max_temp_degc", "min_temp_degc", "mean_temp_degc",
-        "heat_deg_days_degc", "cool_deg_days_degc",
-        "total_rain_mm", "total_snow_cm", "total_precip_mm",
-        "snow_on_grnd_cm",
-        "dir_of_max_gust_deg", "spd_of_max_gust_km_h",
-    ]
-    extra_id_cols = ["station_name", "climate_id"]
+    # Station-level missing summary (optional output)
+    missing_summary = None
+    if output_missing_csv is not None:
+        cols_for_missing = [
+            "date_time",
+            "longitude_x", "latitude_y",
+            "max_temp_degc", "min_temp_degc", "mean_temp_degc",
+            "heat_deg_days_degc", "cool_deg_days_degc",
+            "total_rain_mm", "total_snow_cm", "total_precip_mm",
+            "snow_on_grnd_cm",
+            "dir_of_max_gust_deg", "spd_of_max_gust_km_h",
+        ]
+        extra_id_cols = ["station_name", "climate_id"]
 
-    missing_summary = compute_station_missing_rates(
-        df=df,
-        station_col="station_id",
-        cols_to_check=cols_for_missing,
-        extra_id_cols=extra_id_cols,
-    )
+        missing_summary = compute_station_missing_rates(
+            df=df,
+            station_col="station_id",
+            cols_to_check=cols_for_missing,
+            extra_id_cols=extra_id_cols,
+        )
 
-    # Outputs
-    out_clean_csv = output_dir / "ON_weather_daily_merged_2020—2025_clean.csv"
-    out_clean_parquet = output_dir / "ON_weather_daily_merged_2020—2025_clean.parquet"
-    out_miss_csv = output_dir / "station_missing_rate_summary.csv"
-    out_miss_parquet = output_dir / "station_missing_rate_summary.parquet"
+        missing_summary.to_csv(output_missing_csv, index=False)
 
-    df.to_csv(out_clean_csv, index=False)
-    missing_summary.to_csv(out_miss_csv, index=False)
-
-    # Parquet write: do not abort on failure
-    err1 = safe_to_parquet(df, out_clean_parquet)
-    err2 = safe_to_parquet(missing_summary, out_miss_parquet)
+    # Write clean csv
+    df.to_csv(output_csv, index=False)
 
     summary = {
+        "input_rows": int(pd.read_csv(input_csv, low_memory=False).shape[0]),
         "output_rows": int(df.shape[0]),
-        "deduped_rows": int(deduped),
+        "deduped_rows_station_date": int(deduped),
         "n_cols_clean": int(df.shape[1]),
-        "n_stations": int(missing_summary["station_id"].nunique()) if "station_id" in missing_summary.columns else None,
-        "output_clean_csv": str(out_clean_csv),
-        "output_missing_csv": str(out_miss_csv),
-        "output_clean_parquet": str(out_clean_parquet),
-        "output_missing_parquet": str(out_miss_parquet),
-        "parquet_clean_error": err1 if err1 else None,
-        "parquet_missing_error": err2 if err2 else None,
+        "output_clean_csv": str(output_csv),
+        "output_missing_csv": str(output_missing_csv) if output_missing_csv is not None else None,
+        "n_stations": int(missing_summary["station_id"].nunique()) if missing_summary is not None else None,
     }
     return summary
 
 
 # -----------------------------
-# Entry point
+# 3) CLI entry point (workflow-ready)
 # -----------------------------
-if __name__ == "__main__":
-    INPUT = "/Users/zhangrilong/Downloads/clean data/ON_weather_daily_merged_2020_2025.csv"  # change to your file path
-    OUTPUT_DIR = "cleaned_weather"  # change to your desired output directory
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Clean Ontario daily weather dataset (station-day)")
 
-    summary = clean_weather_daily(
-        input_csv=INPUT,
-        output_dir=OUTPUT_DIR,
-        drop_flag_columns=True,
+    p.add_argument("--in", dest="input_csv", required=True, help="Input CSV path")
+    p.add_argument("--out", dest="output_csv", required=True, help="Output clean CSV path")
+
+    p.add_argument(
+        "--out-missing",
+        dest="output_missing_csv",
+        default=None,
+        help="(Optional) Output station-level missing rate summary CSV path",
     )
 
-    print("✅ Cleaning done. Summary:")
+    p.add_argument(
+        "--out-zip",
+        dest="output_zip",
+        default=None,
+        help="(Optional) Also write a .zip containing only the clean CSV",
+    )
+
+    p.add_argument(
+        "--keep-flag-columns",
+        action="store_true",
+        help="Keep original *_flag columns (default drops them)",
+    )
+
+    return p.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    summary = clean_weather_daily(
+        input_csv=args.input_csv,
+        output_csv=args.output_csv,
+        output_missing_csv=args.output_missing_csv,
+        drop_flag_columns=not args.keep_flag_columns,
+    )
+
+    # If requested, zip the clean CSV
+    if args.output_zip:
+        zip_single_file(Path(args.output_csv), Path(args.output_zip))
+
+    print("✅ Weather cleaning done. Summary:")
     for k, v in summary.items():
         print(f"- {k}: {v}")
+
+
+if __name__ == "__main__":
+    main()
