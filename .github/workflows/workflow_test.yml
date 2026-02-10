@@ -39,22 +39,25 @@ jobs:
           test -s outputs/pm25_hourly_wide_final.csv
           test -s outputs/station_lookup.csv
 
-      - name: Build daily PM2.5
+      - name: Build daily PM2.5 (REGION aggregated)
         run: |
           mkdir -p outputs
           uv run --no-project python scripts/build_daily_pm25.py \
             --in "outputs/pm25_hourly_wide_final.csv" \
-            --out "outputs/pm25_daily.csv" \
+            --out "outputs/pm25_daily_region.csv" \
             --min-hours 0 \
             --require-region
 
-      - name: Output PM2.5 artifact
+      - name: Sanity check region-daily output exists
+        run: |
+          test -s outputs/pm25_daily_region.csv
+
+      - name: Output PM2.5 artifact (region only)
         uses: actions/upload-artifact@v4
         with:
           name: pm25_outputs
           path: |
-            outputs/pm25_hourly_wide_final.csv
-            outputs/pm25_daily.csv
+              outputs/pm25_hourly_wide_final.csv
+              outputs/station_lookup.csv
+              outputs/pm25_daily_region.csv
           if-no-files-found: error
-
-
