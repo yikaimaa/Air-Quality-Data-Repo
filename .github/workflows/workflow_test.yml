@@ -99,7 +99,7 @@ jobs:
         run: |
           test -s outputs/weather_station_region_lookup_nn.csv
 
-            - name: Build joined table
+      - name: Build joined table
         run: |
           mkdir -p outputs
           uv run --no-project python pm25_weather_region_join.py \
