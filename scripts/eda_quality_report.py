@@ -1,18 +1,21 @@
-
 from __future__ import annotations
 import argparse
 from pathlib import Path
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import base64
 from io import BytesIO
 from datetime import datetime
+
 
 def fig_to_base64(fig):
     buf = BytesIO()
     fig.savefig(buf, format="png", bbox_inches="tight")
     buf.seek(0)
     return base64.b64encode(buf.read()).decode("utf-8")
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -26,6 +29,10 @@ def main():
     print("===== BASIC INFO =====")
     print("Rows:", len(df))
     print("Columns:", len(df.columns))
+
+    # --------------------------------------------------
+    # Missing value profiling
+    # --------------------------------------------------
 
     print("\n===== MISSING RATE BY COLUMN =====")
     missing_rate = df.isna().mean().sort_values(ascending=False)
@@ -44,19 +51,43 @@ def main():
     missing_date = df.groupby("date").apply(lambda x: x.isna().mean().mean())
     print(missing_date.head())
 
+    # --------------------------------------------------
+    # Duplicate check
+    # --------------------------------------------------
+
     print("\n===== DUPLICATE CHECK =====")
     dup_count = df.duplicated().sum()
     dup_region_date = df.duplicated(subset=["region", "date"]).sum()
+
     print("Total duplicate rows:", dup_count)
     print("Duplicate (region,date):", dup_region_date)
 
+    # --------------------------------------------------
+    # Zero column check (NEW)
+    # --------------------------------------------------
+
+    print("\n===== ALL-ZERO COLUMN CHECK =====")
+
+    numeric_df = df.select_dtypes(include="number")
+    zero_cols = numeric_df.columns[(numeric_df == 0).all()].tolist()
+
+    print("Columns that are entirely zero:")
+    print(zero_cols if zero_cols else "None")
+
+    # --------------------------------------------------
+    # Date completeness check
+    # --------------------------------------------------
+
     print("\n===== DATE COMPLETENESS CHECK =====")
+
     df["date"] = pd.to_datetime(df["date"])
-    start = datetime(2020,1,1)
-    end = datetime(2024,12,31)
+    start = datetime(2020, 1, 1)
+    end = datetime(2024, 12, 31)
+
     full_range = pd.date_range(start, end, freq="D")
 
     region_date_missing = {}
+
     for region in df["region"].unique():
         sub = df[df["region"] == region]
         existing = set(sub["date"])
@@ -65,6 +96,10 @@ def main():
 
     print("Missing dates per region:")
     print(region_date_missing)
+
+    # --------------------------------------------------
+    # Plotting
+    # --------------------------------------------------
 
     fig1, ax1 = plt.subplots()
     missing_region.plot(kind="bar", ax=ax1)
@@ -80,10 +115,19 @@ def main():
     img_time = fig_to_base64(fig2)
     plt.close(fig2)
 
+    # --------------------------------------------------
+    # HTML report
+    # --------------------------------------------------
+
     html = f"""
     <html>
     <head>
         <title>EDA Quality Report</title>
+        <style>
+            body {{ font-family: Arial; }}
+            table {{ border-collapse: collapse; }}
+            th, td {{ border: 1px solid #ccc; padding: 6px; }}
+        </style>
     </head>
     <body>
         <h1>EDA Quality Report</h1>
@@ -108,8 +152,12 @@ def main():
         <p>Total duplicate rows: {dup_count}</p>
         <p>Duplicate (region,date): {dup_region_date}</p>
 
+        <h2>All-Zero Columns</h2>
+        <pre>{zero_cols if zero_cols else "None"}</pre>
+
         <h2>Date Completeness (2020-01-01 to 2024-12-31)</h2>
         <pre>{region_date_missing}</pre>
+
     </body>
     </html>
     """
@@ -119,6 +167,7 @@ def main():
         f.write(html)
 
     print("\nEDA HTML report written to:", args.out_html)
+
 
 if __name__ == "__main__":
     main()
