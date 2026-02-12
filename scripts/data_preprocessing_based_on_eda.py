@@ -93,7 +93,7 @@ def main():
     final_rows, final_cols = df.shape
 
     print("\n==============================")
-    print("DATA PREPROCESSING V2 SUMMARY")
+    print("DATA PREPROCESSING SUMMARY")
     print("==============================")
     print(f"Initial rows: {initial_rows}")
     print(f"Final rows:   {final_rows}")
