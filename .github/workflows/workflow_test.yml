@@ -155,3 +155,20 @@ jobs:
           name: pm25_weather_daily_region_joined
           path: outputs/pm25_weather_daily_region_joined.csv
           if-no-files-found: error
+
+      # ============================================================
+      # EDA QUALITY REPORT
+      # ============================================================
+
+      - name: Run EDA quality report
+        run: |
+          uv run --no-project python scripts/eda_quality_report.py \
+            --in "outputs/pm25_weather_daily_region_joined.csv" \
+            --out "outputs/eda_report.html"
+
+      - name: Upload EDA HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: eda_report
+          path: outputs/eda_report.html
+          if-no-files-found: error
