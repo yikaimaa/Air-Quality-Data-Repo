@@ -108,6 +108,23 @@ jobs:
             --out "outputs/eda_report.html"
 
       # ============================================================
+      # Filling the time series from 2020-01-01 to 2024-12-31
+      # ============================================================
+      
+      - name: Fill missing time series
+        run: |
+          uv run --no-project python scripts/fill_missing_time_series.py \
+            --input outputs/pm25_weather_daily_region_joined.csv \
+            --output outputs/pm25_weather_daily_region_filled.csv
+
+      - name: Upload filled time series artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pm25_weather_daily_region_filled
+          path: outputs/pm25_weather_daily_region_filled.csv
+          if-no-files-found: error
+
+      # ============================================================
       # DATA CLEANING
       # ============================================================
 
