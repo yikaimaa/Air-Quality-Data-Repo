@@ -15,8 +15,11 @@ def main():
     pm = pd.read_csv(args.pm25)
     wx = pd.read_csv(args.weather)
 
-    pm.columns = pm.columns.str.strip()
-    wx.columns = wx.columns.str.strip()
+    pm.columns = pm.columns.str.strip().str.lower()
+    wx.columns = wx.columns.str.strip().str.lower()
+
+    print("PM columns:", pm.columns.tolist())
+    print("Weather columns:", wx.columns.tolist())
 
     if "region" not in pm.columns or "region" not in wx.columns:
         raise ValueError("Both inputs must contain 'region'")
