@@ -50,14 +50,12 @@ jobs:
       - name: Sanity check region-daily output exists
         run: |
           test -s outputs/pm25_daily_region.csv
-
+          
       - name: Merge daily weather (Ontario, 2020-2025)
         run: |
-          # Station-year weather files live under this folder (you must have them in the repo)
           WEATHER_BASE="Datasets/Ontario/weather_raw_by_station"
-          IDS_FILE="Datasets/Ontario/weather_raw/on_station_ids.txt"
+          IDS_FILE="scripts/on_station_ids.txt"
 
-          # Workspace outputs (NOT committed to repo)
           MERGED_DIR="outputs/weather_merged"
           WEATHER_IN="outputs/weather_merged/ON_weather_daily_merged_2020_2025.csv"
 
@@ -69,9 +67,8 @@ jobs:
             --years "2020-2025" \
             --out-dir "$MERGED_DIR" \
             --out-all "$WEATHER_IN"
-
-      - name: Clean daily weather (Ontario, 2020-2025)
-        run: |
+            - name: Clean daily weather (Ontario, 2020-2025)
+          run: |
           # Input dataset produced by previous step
           WEATHER_IN="outputs/weather_merged/ON_weather_daily_merged_2020_2025.csv"
 
