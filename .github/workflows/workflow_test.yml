@@ -51,6 +51,20 @@ jobs:
         run: |
           test -s outputs/pm25_daily_region.csv
 
+      - name: Merge daily weather by year (2020-2025)
+        run: |
+          WEATHER_BASE="Datasets/Ontario/weather_raw_by_station"   # 你存 station_{id}/... 的目录
+          IDS_FILE="Datasets/Ontario/weather_raw/on_station_ids.txt"
+          MERGED_DIR="outputs/weather_merged"
+          MERGED_ALL="outputs/weather_merged/ON_weather_daily_merged_2020_2025.csv"
+
+          uv run python scripts/weather_merge_by_year.py \
+            --base-dir "$WEATHER_BASE" \
+            --ids-file "$IDS_FILE" \
+            --years "2020-2025" \
+            --out-dir "$MERGED_DIR" \
+            --out-all "$MERGED_ALL"
+
       - name: Clean daily weather (Ontario, 2020-2025)
         run: |
           # Input dataset (provided by you)
