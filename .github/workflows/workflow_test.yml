@@ -50,7 +50,7 @@ jobs:
           uv run --no-project python scripts/build_daily_pm25_region.py \
             --in "outputs/pm25_hourly_wide_final.csv" \
             --out "outputs/pm25_daily_region.csv" \
-            --lookup "Datasets/Ontario/intermediate_tables/pm25_station_region_lookup.csv" \
+            --station-region-lookup "Datasets/Ontario/intermediate_tables/pm25_station_region_lookup.csv" \
             --require-region \
             --min-hours 0
 
