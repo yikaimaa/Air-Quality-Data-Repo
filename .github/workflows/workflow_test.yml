@@ -50,6 +50,20 @@ jobs:
       - name: Sanity check region-daily output exists
         run: |
           test -s outputs/pm25_daily_region.csv
+
+      - name: Debug: locate station-year weather files
+        run: |
+          echo "== list top under Datasets/Ontario =="
+          ls -la Datasets/Ontario || true
+
+          echo "== find any station_*_daily_2020.csv (sample) =="
+          find Datasets -maxdepth 8 -type f -name "station_*_daily_2020.csv" | head -n 20 || true
+
+          echo "== find any *_daily_2020.csv (broader) =="
+          find Datasets -maxdepth 8 -type f -name "*_daily_2020.csv" | head -n 20 || true
+
+          echo "== find any station_* folders (sample) =="
+          find Datasets -maxdepth 6 -type d -name "station_*" | head -n 20 || true
           
       - name: Merge daily weather (Ontario, 2020-2025)
         run: |
