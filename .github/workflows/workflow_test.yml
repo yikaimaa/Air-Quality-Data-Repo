@@ -131,9 +131,9 @@ jobs:
       - name: Apply shift1 to prevent data leakage
         run: |
           uv run --no-project python scripts/shift1_prevent_data_leakage.py \
-            --input "outputs/clean_dataset.csv" \
-            --output "outputs/model_ready_shift1.csv"
-            --pm-col "pm25_region_daily_avg"
+            --input outputs/clean_dataset.csv \
+            --output outputs/model_ready_shift1.csv \
+            --pm-col pm25_region_daily_avg
 
       # ============================================================
       # ARTIFACT UPLOAD
