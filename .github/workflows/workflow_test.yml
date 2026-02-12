@@ -28,9 +28,9 @@ jobs:
         run: |
           uv run --no-project python -c "import numpy, pandas, requests"
 
-      # ------------------------------------------------------------
+      # ============================================================
       # PM2.5 PIPELINE
-      # ------------------------------------------------------------
+      # ============================================================
 
       - name: Build hourly PM2.5 (Ontario)
         run: |
@@ -58,9 +58,9 @@ jobs:
         run: |
           test -s outputs/pm25_daily_region.csv
 
-      # ------------------------------------------------------------
+      # ============================================================
       # WEATHER PIPELINE
-      # ------------------------------------------------------------
+      # ============================================================
 
       - name: Clean daily weather (Ontario, 2020-2025)
         run: |
@@ -99,4 +99,27 @@ jobs:
       - name: Sanity check weather station-region lookup exists
         run: |
           test -s outputs/weather_station_region_lookup_nn.csv
-          wc -l outputs/weather_station_region_lookup_nn.csv
+
+      - name: Attach region to weather daily
+        run: |
+          uv run --no-project python scripts/attach_region_to_weather.py \
+            --weather "outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv" \
+            --lookup "outputs/weather_station_region_lookup_nn.csv" \
+            --out "outputs/weather_daily_with_region.csv"
+
+      - name: Sanity check weather daily with region
+        run: |
+          test -s outputs/weather_daily_with_region.csv
+          echo "Row count:"
+          wc -l outputs/weather_daily_with_region.csv
+
+      # ============================================================
+      # ARTIFACT
+      # ============================================================
+
+      - name: Upload weather_daily_with_region as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weather_daily_with_region
+          path: outputs/weather_daily_with_region.csv
+          if-no-files-found: error
