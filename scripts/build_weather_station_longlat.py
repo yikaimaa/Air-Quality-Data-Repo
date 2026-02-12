@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 import pandas as pd
+import argparse
+
 
 
 def pick_first_existing_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
@@ -29,13 +31,21 @@ def find_station_id_col(df: pd.DataFrame) -> str | None:
 
 def main():
     # Repo-relative paths (script lives in scripts/)
-    BASE_DIR = Path(__file__).resolve().parent.parent
-    DATA_DIR = BASE_DIR / "Datasets" / "Ontario"
+    # BASE_DIR = Path(__file__).resolve().parent.parent
+    # DATA_DIR = BASE_DIR / "Datasets" / "Ontario"
 
-    WEATHER_PATH = DATA_DIR / "ON_weather_daily_merged_2020-2025_clean.csv"
-    OUT_PATH = DATA_DIR / "weather_stations_latlon.csv"
+    # WEATHER_PATH = DATA_DIR / "ON_weather_daily_merged_2020-2025_clean.csv"
+    # OUT_PATH = DATA_DIR / "weather_stations_latlon.csv"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--weather", type=str, required=True)
+    parser.add_argument("--out", type=str, required=True)
+    args = parser.parse_args()
+
+    WEATHER_PATH = Path(args.weather)
+    OUT_PATH = Path(args.out)  
 
     df = pd.read_csv(WEATHER_PATH)
+
     print(f"Loaded weather rows: {len(df):,}")
     print(f"Columns: {list(df.columns)}")
 
