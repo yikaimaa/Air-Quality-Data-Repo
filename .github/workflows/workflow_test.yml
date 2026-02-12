@@ -142,23 +142,18 @@ jobs:
           if-no-files-found: error
           
       # ============================================================
-      # SHIFT1 CAUSAL ALIGNMENT (PREVENT DATA LEAKAGE)
+      # SHIFT1 (Prevent Data Leakage)
       # ============================================================
 
       - name: Apply shift1 to prevent data leakage
         run: |
           uv run --no-project python scripts/shift1_prevent_data_leakage.py \
             --input outputs/clean_dataset.csv \
-            --output outputs/model_ready_shift1.csv \
-            --pm-col pm25_region_daily_avg
+            --output outputs/model_ready_dataset.csv
 
-      # ============================================================
-      # ARTIFACT UPLOAD
-      # ============================================================
-
-      - name: Upload model_ready_shift1 artifact
+      - name: Upload model ready dataset
         uses: actions/upload-artifact@v4
         with:
-          name: model_ready_shift1
-          path: outputs/model_ready_shift1.csv
+          name: model_ready_dataset
+          path: outputs/model_ready_dataset.csv
           if-no-files-found: error
