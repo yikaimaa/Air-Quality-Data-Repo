@@ -125,22 +125,22 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # DATA CLEANING
+      # DATA PREPROCESSING BASED ON EDA
       # ============================================================
 
       - name: Data preprocessing based on EDA
         run: |
           uv run --no-project python scripts/data_preprocessing_based_on_eda.py \
-            --in "outputs/pm25_weather_daily_region_joined.csv" \
-            --out "outputs/clean_dataset.csv"
-            
+            --in outputs/pm25_weather_daily_region_filled.csv \
+            --out outputs/clean_dataset.csv
+
       - name: Upload clean dataset artifact
         uses: actions/upload-artifact@v4
         with:
-          name: clean_dataset_debug
+          name: clean_dataset
           path: outputs/clean_dataset.csv
           if-no-files-found: error
-
+          
       # ============================================================
       # SHIFT1 CAUSAL ALIGNMENT (PREVENT DATA LEAKAGE)
       # ============================================================
