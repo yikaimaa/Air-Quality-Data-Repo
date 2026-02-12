@@ -2,9 +2,9 @@
 title: "Air Quality Analysis"
 subtitle: "Findings Reveal Vaccination and Healthcare Spending as Key Drivers of Mortality Reduction"
 author:
-  - name: Junbo Li[^1]
+  - name: Junbo Li
 abstract: "123"
-format: html
+format: pdf
 date: today
 date-format: long
 bibliography: references.bib
@@ -12,24 +12,31 @@ number-sections: true
 toc: true
 ---
 
-## Quarto
+# Introduction
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-[^1]: Code and data are available at: https://github.com/Junbo345/Mortality_analysis
 
-## Running Code
+Over the past several decades, advances in environmental regulation, emissions controls, and monitoring technologies have led to substantial improvements in air quality across many regions. In high-income countries, long-term declines in fine particulate matter (PM2.5) concentrations have contributed to reductions in pollution-related morbidity and mortality, representing a major public-health achievement, particularly for children [@who2021air].
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+Despite this progress, recent years have seen stagnation and episodic reversals in air-quality improvements. Since approximately 2015, climate-driven factors—most notably increasingly severe and frequent wildfires—have become a dominant source of extreme PM2.5 exposure [@reid2016wildfire]. In Canada, wildfire smoke has repeatedly affected population centres far from fire origins, including the Greater Toronto Area and Ottawa–Gatineau, resulting in prolonged periods of hazardous air quality that strain existing public-health response systems.
 
-```{r}
-1 + 1
-```
+The health and operational impacts of poor air quality are unevenly distributed. Children are particularly vulnerable due to developing respiratory systems and higher relative inhalation rates, and exposure to elevated PM2.5 is strongly linked to adverse respiratory and cardiovascular outcomes [@brook2010particulate]. At the institutional level, preparedness also varies across regions. Many education systems continue to rely on same-day or reactive air-quality advisories, leaving limited time for schools to adjust outdoor activities, ventilation strategies, transportation, and communications, thereby increasing disruption during air-quality emergencies.
 
-You can add options to executable code like this
+Short-term air quality is shaped by a combination of atmospheric conditions and human activity. Meteorological variables such as wind, temperature, humidity, and precipitation influence pollutant dispersion, while traffic remains a major local contributor to PM2.5 concentrations. Prior work suggests that incorporating meteorological and traffic information can improve short-horizon air-quality forecasts beyond persistence and classical time-series approaches [@cheng2021forecasting]. However, the policy relevance of these improvements—particularly for next-day decision-making in education systems—remains insufficiently examined.
 
-```{r}
-#| echo: false
-2 * 2
-```
+In this study, we assess whether next-day PM2.5 (24-hour mean) can be reliably predicted using routinely available traffic and weather data, and whether these forecasts can be translated into actionable next-day air-quality alerts. The primary stakeholder for this work is Provincial Ministries of Education, particularly policy, analytics, and student well-being units responsible for issuing guidance to school boards during environmental health events. We find that incorporating traffic and meteorological predictors improves forecasting performance relative to persistence and classical baselines and supports the construction of transparent alerting systems that balance recall and precision.
 
-The `echo: false` option disables the printing of code (only output is displayed).
+The estimand of this study is the effect of lagged air-quality measures, meteorological variables, and traffic indicators on next-day PM2.5 concentrations at the station or regional level. By quantifying these relationships, this analysis evaluates the feasibility of a short-horizon, policy-ready forecasting and alerting framework to support proactive and equitable decision-making during air-quality emergencies affecting schools.
+
+The remainder of this paper is organized as follows. @sec-data describes the data sources, spatial alignment, and preprocessing steps. @sec-model outlines the modeling and validation strategy. @sec-results presents forecasting and alerting performance results by season and region. Finally, @sec-diss discusses policy implications, limitations, and directions for future work.
+
+# Data {#sec-data}
+
+# Model {#sec-model}
+
+# Reults {#sec-results}
+
+
+# Discussion {#sec-diss}
+
+123
+
