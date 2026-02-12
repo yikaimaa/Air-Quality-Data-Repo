@@ -8,7 +8,7 @@ import pandas as pd
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Shift all non-pm25 features by +1 to prevent data leakage."
+        description="Create next-day PM2.5 label for prediction task."
     )
 
     parser.add_argument("--input", required=True, help="Path to cleaned dataset")
@@ -36,53 +36,40 @@ def main():
         raise ValueError(f"Missing required columns: {missing}")
 
     # Ensure correct temporal order
+    df[args.date_col] = pd.to_datetime(df[args.date_col])
     df = df.sort_values([args.region_col, args.date_col]).reset_index(drop=True)
 
-    # Rename pm25 column (NO SHIFT)
-    df = df.rename(columns={args.pm_col: "pm25_label"})
-    print("[INFO] pm25_region_daily_avg -> renamed to pm25_label")
-
-    # Identify feature columns to shift
-    exclude_cols = {
-        args.region_col,
-        args.date_col,
-        "pm25_label",
-    }
-
-    feature_cols = [c for c in df.columns if c not in exclude_cols]
-
-    print(f"[INFO] Number of feature columns to shift: {len(feature_cols)}")
-
-    # Shift features
-    shifted = (
-        df.groupby(args.region_col)[feature_cols]
-        .shift(1)
+    # ------------------------------------------------------------
+    # 1️⃣ Create next-day label (shift -1)
+    # ------------------------------------------------------------
+    df["pm25_label"] = (
+        df.groupby(args.region_col)[args.pm_col]
+        .shift(-1)
     )
 
-    # Rename shifted columns
-    shifted.columns = [f"{c}_lag" for c in feature_cols]
+    print("[INFO] pm25_label created using next-day PM2.5 (shift -1)")
 
-    # Drop original feature columns
-    df = df.drop(columns=feature_cols)
-
-    # Concatenate shifted features
-    df = pd.concat([df, shifted], axis=1)
-
-    # Drop NA rows after shift
+    # ------------------------------------------------------------
+    # 3️⃣ Drop rows where label is NA (last day per region)
+    # ------------------------------------------------------------
     before_rows = len(df)
-    df = df.dropna()
+
+    df = df.dropna(subset=["pm25_label"])
+
     after_rows = len(df)
     dropped_rows = before_rows - after_rows
 
     print("\n==============================")
-    print("SHIFT1 SUMMARY")
+    print("NEXT-DAY LABEL SUMMARY")
     print("==============================")
-    print(f"Rows before dropna: {before_rows}")
-    print(f"Rows after dropna:  {after_rows}")
-    print(f"Rows dropped due to shift: {dropped_rows}")
+    print(f"Rows before drop: {before_rows}")
+    print(f"Rows after drop:  {after_rows}")
+    print(f"Rows dropped (last day per region): {dropped_rows}")
     print("==============================\n")
 
-    # Save
+    # ------------------------------------------------------------
+    # 4️⃣ Save
+    # ------------------------------------------------------------
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
 
