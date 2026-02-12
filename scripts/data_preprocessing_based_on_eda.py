@@ -1,8 +1,8 @@
-
 from __future__ import annotations
 import argparse
 from pathlib import Path
 import pandas as pd
+import numpy as np
 
 
 def main():
@@ -18,81 +18,82 @@ def main():
     df = pd.read_csv(args.in_path)
     df.columns = df.columns.str.lower()
 
+    initial_rows, initial_cols = df.shape
     print(f"Initial shape: {df.shape}")
-    initial_rows = df.shape[0]
-    initial_cols = df.shape[1]
 
     # --------------------------------------------------
     # 1️⃣ Drop severely incomplete region
     # --------------------------------------------------
-    print("\n[STEP 1] Dropping Renfrew County (severely incomplete region)")
-    before_region = df.shape[0]
     df = df[df["region"] != "Renfrew County"]
-    after_region = df.shape[0]
-    print(f"Rows removed: {before_region - after_region}")
 
     # --------------------------------------------------
-    # 2️⃣ Drop non-modeling metadata columns
+    # 2️⃣ Drop metadata columns
     # --------------------------------------------------
-    print("\n[STEP 2] Dropping metadata columns (n_stations_total, n_stations_used)")
+    metadata_cols = ["n_stations_total", "n_stations_used"]
+    metadata_cols = [c for c in metadata_cols if c in df.columns]
 
-    drop_cols = ["n_stations_total", "n_stations_used"]
-    existing_drop = [c for c in drop_cols if c in df.columns]
-
-    if existing_drop:
-        df = df.drop(columns=existing_drop)
-        print(f"Columns removed: {existing_drop}")
-    else:
-        print("No metadata columns found.")
+    if metadata_cols:
+        print("Dropping metadata columns:", metadata_cols)
+        df = df.drop(columns=metadata_cols)
 
     # --------------------------------------------------
-    # 3️⃣ Drop all-zero numeric columns
+    # 3️⃣ Drop flag / quality columns
     # --------------------------------------------------
-    print("\n[STEP 3] Dropping all-zero numeric columns")
+    flag_cols = [c for c in df.columns if "_is_" in c or "data_quality" in c]
 
+    if flag_cols:
+        print("Dropping flag columns:", flag_cols)
+        df = df.drop(columns=flag_cols)
+
+    # --------------------------------------------------
+    # 4️⃣ Drop all-zero numeric columns
+    # --------------------------------------------------
     numeric_df = df.select_dtypes(include="number")
     zero_cols = numeric_df.columns[(numeric_df == 0).all()].tolist()
 
     if zero_cols:
+        print("Dropping all-zero columns:", zero_cols)
         df = df.drop(columns=zero_cols)
-        print(f"Zero columns removed: {zero_cols}")
-    else:
-        print("No all-zero columns found.")
 
     # --------------------------------------------------
-    # 4️⃣ Handle structural missing (snow-related)
+    # 5️⃣ Drop near-constant columns (variance threshold)
     # --------------------------------------------------
-    print("\n[STEP 4] Filling structural snow-related missing values with 0")
+    numeric_df = df.select_dtypes(include="number")
+    var_series = numeric_df.var()
 
+    near_constant_cols = var_series[var_series < 1e-8].index.tolist()
+
+    if near_constant_cols:
+        print("Dropping near-constant columns:", near_constant_cols)
+        df = df.drop(columns=near_constant_cols)
+
+    # --------------------------------------------------
+    # 6️⃣ Handle structural missing (snow-related)
+    # --------------------------------------------------
     snow_cols = ["total_snow_cm", "snow_on_grnd_cm"]
     for col in snow_cols:
         if col in df.columns:
             df[col] = df[col].fillna(0)
-            print(f"Filled missing in {col} with 0")
 
     # --------------------------------------------------
-    # 5️⃣ Forward fill remaining numeric columns within region
+    # 7️⃣ Forward fill continuous physical variables
     # --------------------------------------------------
-    print("\n[STEP 5] Forward filling numeric columns within each region (safe, no leakage)")
-
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values(["region", "date"])
 
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
 
-    df[numeric_cols] = (
-        df.groupby("region")[numeric_cols]
-        .ffill()
-    )
+    ffill_cols = [c for c in numeric_cols if "pm25" not in c]
+
+    df[ffill_cols] = df.groupby("region")[ffill_cols].ffill()
 
     # --------------------------------------------------
     # Final summary
     # --------------------------------------------------
-    final_rows = df.shape[0]
-    final_cols = df.shape[1]
+    final_rows, final_cols = df.shape
 
     print("\n==============================")
-    print("DATA PREPROCESSING SUMMARY")
+    print("DATA PREPROCESSING V2 SUMMARY")
     print("==============================")
     print(f"Initial rows: {initial_rows}")
     print(f"Final rows:   {final_rows}")
@@ -101,14 +102,11 @@ def main():
     print(f"Remaining missing values: {df.isna().sum().sum()}")
     print("==============================\n")
 
-    # --------------------------------------------------
-    # Save cleaned dataset
-    # --------------------------------------------------
     Path(args.out_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(args.out_path, index=False)
 
     print("Clean dataset written to:", args.out_path)
-    print("\nDATA PREPROCESSING COMPLETED\n")
+    print("\nDATA PREPROCESSING V2 COMPLETED\n")
 
 
 if __name__ == "__main__":
