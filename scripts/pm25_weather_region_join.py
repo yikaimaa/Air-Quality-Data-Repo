@@ -15,8 +15,8 @@ from pathlib import Path
 import pandas as pd
 
 
-PM25_DEFAULT = "pm25_daily_region.csv"
-WEATHER_DEFAULT = "ON_weather_daily_merged_2020-2025_with_region.csv"
+PM25_DEFAULT = "Datasets/Ontario/processed_datasets/pm25_daily_region.csv"
+WEATHER_DEFAULT = "Datasets/Ontario/processed_datasets/ON_weather_daily_merged_2020-2025_with_region.csv"
 
 
 # Weather columns aggregation rules when collapsing to (region, date)

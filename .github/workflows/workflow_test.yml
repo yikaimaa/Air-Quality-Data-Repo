@@ -30,7 +30,7 @@ jobs:
         run: |
           mkdir -p outputs
           uv run --no-project python scripts/build_hourly_pm25.py \
-            --input-dir "Datasets/Ontario/PM25" \
+            --input-dir "Datasets/Ontario/PM25_raw" \
             --out "outputs/pm25_hourly_wide_final.csv" \
             --out-station-lookup "outputs/station_lookup.csv"
 
