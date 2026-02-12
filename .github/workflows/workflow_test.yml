@@ -51,7 +51,7 @@ jobs:
         run: |
           test -s outputs/pm25_daily_region.csv
 
-      - name: Debug: locate station-year weather files
+      - name: Debug locate station-year weather files
         run: |
           echo "== list top under Datasets/Ontario =="
           ls -la Datasets/Ontario || true
