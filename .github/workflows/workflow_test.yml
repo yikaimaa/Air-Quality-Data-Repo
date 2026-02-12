@@ -54,7 +54,7 @@ jobs:
       - name: Clean daily weather (Ontario, 2020-2025)
         run: |
           # Input dataset (provided by you)
-          WEATHER_IN="Datasets/Ontario/weather_data_merged_by_year/ON_weather_daily_merged_2020_2025.csv"
+          WEATHER_IN="Datasets/Ontario/weather_raw/ON_weather_daily_merged_2020_2025.csv"
 
           # Target output paths (provided by you)
           WEATHER_OUT_CSV="Datasets/Ontario/ON_weather_daily_merged_2020-2025_clean.csv"
@@ -90,7 +90,7 @@ jobs:
         run: |
           mkdir -p outputs
           uv run --no-project python scripts/build_weather_station_region_lookup.py \
-            --pm25-lookup "Datasets/Ontario/pm25_station_region_lookup.csv" \
+            --pm25-lookup "Datasets/Ontario/processed_datasets/pm25_station_region_lookup.csv" \
             --weather-latlon "outputs/weather_stations_latlon.csv" \
             --out "outputs/weather_station_region_lookup_nn.csv" \
             --threshold-km 75
@@ -99,14 +99,13 @@ jobs:
         run: |
           test -s outputs/weather_station_region_lookup_nn.csv
 
-      - name: Build joined table
+            - name: Build joined table
         run: |
           mkdir -p outputs
           uv run --no-project python pm25_weather_region_join.py \
             --pm25 "outputs/pm25_daily_region.csv" \
             --weather "outputs/weather_stations_latlon.csv" \
             --out "outputs/pm25_weather_daily_region_joined.csv" \
-
       # ------------------ artifacts ------------------
 
       - name: Output artifacts (pm25 + weather lookups)
@@ -117,4 +116,5 @@ jobs:
             outputs/pm25_daily_region.csv
             outputs/weather_stations_latlon.csv
             outputs/weather_station_region_lookup_nn.csv
+            outputs/pm25_weather_daily_region_joined.csv
           if-no-files-found: error
