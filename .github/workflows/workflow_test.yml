@@ -54,7 +54,7 @@ jobs:
       - name: Clean daily weather (Ontario, 2020-2025)
         run: |
           # Input dataset (provided by you)
-          WEATHER_IN="Datasets/Ontario/weather_data_merged_by_year/ON_weather_daily_merged_2020_2025.csv"
+          WEATHER_IN="Datasets/Ontario/weather_raw/ON_weather_daily_merged_2020_2025.csv"
 
           # Target output paths (provided by you)
           WEATHER_OUT_CSV="Datasets/Ontario/ON_weather_daily_merged_2020-2025_clean.csv"
