@@ -158,6 +158,26 @@ jobs:
           path: outputs/model_ready_dataset.csv
           if-no-files-found: error
 
+
+      # ============================================================
+      # BUILD LSTM DATASET (NPZ) FROM MODEL READY
+      # ============================================================
+
+      - name: Build LSTM dataset (NPZ)
+        run: |
+          uv run --no-project python scripts/build_lstm_dataset_from_model_ready.py \
+            --in "outputs/model_ready_dataset.csv" \
+            --out "outputs/lstm_dataset_seq14.npz" \
+            --seq-len 14
+
+      - name: Upload LSTM dataset (NPZ)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lstm_dataset_npz
+          path: outputs/lstm_dataset_seq14.npz
+          if-no-files-found: error
+
+      
       # ============================================================
       # FEATURE ENGINEERING (NO LEAKAGE)
       # ============================================================

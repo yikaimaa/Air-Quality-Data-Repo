@@ -3,6 +3,7 @@ import pandas as pd
 WEATHER_PATH = "../Datasets/Ontario/processed_datasets/ON_weather_daily_merged_2020-2025_clean.csv"
 PM25_DAILY_PATH = "../Datasets/Ontario/processed_datasets/pm25_daily_cleaned.csv"
 JOINED_TABLE_PATH = "../Datasets/Ontario/processed_datasets/pm25_weather_daily_region_joined.csv"
+MODEL_READY_DATASET_PATH = "../Datasets/Ontario/processed_datasets/model_ready_dataset.csv"
 
 def print_schema(path: str, name: str):
     print("\n" + "=" * 80)
@@ -28,3 +29,4 @@ if __name__ == "__main__":
     print_schema(WEATHER_PATH, "ON_weather_daily_merged_2020-2025_clean")
     print_schema(PM25_DAILY_PATH, "pm25_daily_cleaned")
     print_schema(JOINED_TABLE_PATH, "pm25_weather_daily_region_joined")
+    print_schema(MODEL_READY_DATASET_PATH, "model_ready_dataset")
