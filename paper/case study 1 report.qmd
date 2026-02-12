@@ -31,6 +31,18 @@ The remainder of this paper is organized as follows. @sec-data describes the dat
 
 # Data {#sec-data}
 
+## Overview
+
+This study integrates air quality and meteorological data for Ontario to construct an analysis-ready dataset for next-day PM2.5 forecasting. All datasets are publicly available and provided by provincial or federal agencies under open data licenses. Data access and preprocessing were designed to be reproducible, with scripted workflows used wherever possible.
+
+Hourly PM2.5 concentration data were obtained from Air Quality Ontario, operated by the Ontario Ministry of the Environment, Conservation and Parks (MECP) [@airqualityontario]. The dataset contains historical PM2.5 measurements collected at fixed ambient air monitoring stations across the province. Data are accessible through a web-based interface that supports CSV downloads by station and time range, subject to request limits.
+
+Meteorological data were obtained using scripted downloads from publicly available weather monitoring sources corresponding to Ontario stations [@ecccweather]. Variables include temperature, wind speed and direction, precipitation, and other atmospheric measures commonly used in air quality modeling. Automated scripts were used to retrieve multi-year weather data, standardize timestamp formats, and validate schema consistency across files. Weather observations were temporally aligned with PM2.5 measurements at the daily level and spatially matched to air quality monitoring locations or aggregated regions using geographic coordinates.
+
+Across both datasets, preprocessing steps included timestamp standardization, removal or recoding of invalid values, and harmonization of spatial identifiers to support station-level and region-level analysis. The resulting dataset provides a consistent foundation for evaluating next-day PM2.5 forecasting models and downstream alerting performance.
+
+
+
 # Model {#sec-model}
 
 # Reults {#sec-results}
