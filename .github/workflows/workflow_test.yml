@@ -172,3 +172,20 @@ jobs:
           name: eda_report
           path: outputs/eda_report.html
           if-no-files-found: error
+
+      # ============================================================
+      # DATA PREPROCESSING BASED ON EDA
+      # ============================================================
+
+      - name: Data preprocessing based on EDA
+        run: |
+          uv run --no-project python scripts/data_preprocessing_based_on_eda.py \
+            --in "outputs/pm25_weather_daily_region_joined.csv" \
+            --out "outputs/clean_dataset.csv"
+
+      - name: Upload clean dataset
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean_dataset
+          path: outputs/clean_dataset.csv
+          if-no-files-found: error
