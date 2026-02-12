@@ -112,26 +112,6 @@ jobs:
           path: outputs/weather_station_region_lookup_nn.csv
 
       # ============================================================
-      # DEBUG ID OVERLAP
-      # ============================================================
-
-      - name: Debug station id overlap
-        run: |
-          python - <<EOF
-import pandas as pd
-
-weather = pd.read_csv("outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv")
-lookup = pd.read_csv("outputs/weather_station_region_lookup_nn.csv")
-
-weather_ids = set(weather["station_id"].astype(str))
-lookup_ids = set(lookup["weather_station_id"].astype(str))
-
-print("Weather unique station count:", len(weather_ids))
-print("Lookup unique station count:", len(lookup_ids))
-print("Intersection count:", len(weather_ids & lookup_ids))
-EOF
-
-      # ============================================================
       # ATTACH REGION
       # ============================================================
 
