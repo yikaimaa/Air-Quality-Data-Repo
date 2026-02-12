@@ -99,6 +99,13 @@ jobs:
         run: |
           test -s outputs/weather_station_region_lookup_nn.csv
 
+      - name: Build joined table
+        run: |
+          mkdir -p outputs
+          uv run --no-project python scripts/pm25_weather_region_join.py \
+            --pm25 "outputs/pm25_daily_region.csv" \
+            --weather "Datasets/Ontario/processed_datasets/ON_weather_daily_merged_2020-2025_with_region.csv" \
+            --out "outputs/pm25_weather_daily_region_joined.csv" \
       # ------------------ artifacts ------------------
 
       - name: Output artifacts (pm25 + weather lookups)
@@ -109,4 +116,5 @@ jobs:
             outputs/pm25_daily_region.csv
             outputs/weather_stations_latlon.csv
             outputs/weather_station_region_lookup_nn.csv
+            outputs/pm25_weather_daily_region_joined.csv
           if-no-files-found: error
