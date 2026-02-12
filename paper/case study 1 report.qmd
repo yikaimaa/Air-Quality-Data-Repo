@@ -41,6 +41,10 @@ Meteorological data were obtained using scripted downloads from publicly availab
 
 Across both datasets, preprocessing steps included timestamp standardization, removal or recoding of invalid values, and harmonization of spatial identifiers to support station-level and region-level analysis. The resulting dataset provides a consistent foundation for evaluating next-day PM2.5 forecasting models and downstream alerting performance.
 
+## Cleaning and transformation
+
+
+## EDA
 
 
 # Model {#sec-model}
