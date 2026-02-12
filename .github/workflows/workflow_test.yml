@@ -157,3 +157,20 @@ jobs:
           name: model_ready_dataset
           path: outputs/model_ready_dataset.csv
           if-no-files-found: error
+
+      # ============================================================
+      # FEATURE ENGINEERING (NO LEAKAGE)
+      # ============================================================
+
+      - name: Feature engineering from shift1 output
+        run: |
+          uv run --no-project python scripts/feature_engineering_from_shift1.py \
+            --input outputs/model_ready_dataset.csv \
+            --output outputs/final_model_table.csv
+
+      - name: Upload final model table
+        uses: actions/upload-artifact@v4
+        with:
+          name: final_model_table
+          path: outputs/final_model_table.csv
+          if-no-files-found: error
