@@ -90,7 +90,7 @@ jobs:
         run: |
           mkdir -p outputs
           uv run --no-project python scripts/build_weather_station_region_lookup.py \
-            --pm25-lookup "outputs/pm25_daily_region.csv" \
+            --pm25-lookup "Datasets/Ontario/processed_datasets/pm25_station_region_lookup.csv" \
             --weather-latlon "outputs/weather_stations_latlon.csv" \
             --out "outputs/weather_station_region_lookup_nn.csv" \
             --threshold-km 75
