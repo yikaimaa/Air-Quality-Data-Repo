@@ -40,15 +40,6 @@ jobs:
             --out "outputs/pm25_hourly_wide_final.csv" \
             --out-station-lookup "outputs/station_lookup.csv"
 
-      - name: Upload pm25_hourly artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pm25_hourly_outputs
-          path: |
-            outputs/pm25_hourly_wide_final.csv
-            outputs/station_lookup.csv
-          if-no-files-found: error
-
       - name: Build daily PM2.5 (region)
         run: |
           uv run --no-project python scripts/build_daily_pm25_region.py \
@@ -58,88 +49,24 @@ jobs:
             --require-region \
             --min-hours 0
 
-      - name: Upload pm25_daily_region artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pm25_daily_region
-          path: outputs/pm25_daily_region.csv
-          if-no-files-found: error
-
       # ============================================================
       # WEATHER PIPELINE
       # ============================================================
 
       - name: Clean daily weather
         run: |
-          mkdir -p outputs/weather_clean
           uv run --no-project python scripts/weather_clean.py \
             --in "Datasets/Ontario/weather_raw/ON_weather_daily_merged_2020_2025.csv" \
-            --out "outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv"
-
-      - name: Upload weather_clean artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: weather_clean
-          path: outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv
-          if-no-files-found: error
-
-      - name: Build weather station lat/lon
-        run: |
-          uv run --no-project python scripts/build_weather_station_longlat.py \
-            --weather "outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv" \
-            --out "outputs/weather_stations_latlon.csv"
-
-      - name: Upload weather_stations_latlon artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: weather_stations_latlon
-          path: outputs/weather_stations_latlon.csv
-          if-no-files-found: error
-
-      - name: Build weather station -> region lookup
-        run: |
-          uv run --no-project python scripts/build_weather_station_region_lookup.py \
-            --pm25-lookup "Datasets/Ontario/intermediate_tables/pm25_station_region_lookup.csv" \
-            --weather-latlon "outputs/weather_stations_latlon.csv" \
-            --out "outputs/weather_station_region_lookup_nn.csv" \
-            --threshold-km 75
-
-      - name: Upload weather_station_region_lookup artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: weather_station_region_lookup_nn
-          path: outputs/weather_station_region_lookup_nn.csv
-          if-no-files-found: error
-
-      - name: Attach region to weather
-        run: |
-          uv run --no-project python scripts/attach_region_to_weather.py \
-            --weather "outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv" \
-            --lookup "outputs/weather_station_region_lookup_nn.csv" \
-            --out "outputs/weather_daily_with_region.csv"
-
-      - name: Upload weather_daily_with_region artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: weather_daily_with_region
-          path: outputs/weather_daily_with_region.csv
-          if-no-files-found: error
+            --out "outputs/weather_clean.csv"
 
       - name: Build weather region daily
         run: |
           uv run --no-project python scripts/build_daily_weather_region.py \
-            --in "outputs/weather_daily_with_region.csv" \
+            --in "outputs/weather_clean.csv" \
             --out "outputs/weather_region_daily.csv"
 
-      - name: Upload weather_region_daily artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: weather_region_daily
-          path: outputs/weather_region_daily.csv
-          if-no-files-found: error
-
       # ============================================================
-      # FINAL JOIN PIPELINE
+      # FINAL JOIN
       # ============================================================
 
       - name: Join PM2.5 and weather
@@ -149,43 +76,35 @@ jobs:
             --weather "outputs/weather_region_daily.csv" \
             --out "outputs/pm25_weather_daily_region_joined.csv"
 
-      - name: Upload joined artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pm25_weather_daily_region_joined
-          path: outputs/pm25_weather_daily_region_joined.csv
-          if-no-files-found: error
-
       # ============================================================
-      # EDA QUALITY REPORT
+      # EDA + CLEAN
       # ============================================================
 
-      - name: Run EDA quality report
+      - name: Run EDA report
         run: |
           uv run --no-project python scripts/eda_quality_report.py \
             --in "outputs/pm25_weather_daily_region_joined.csv" \
             --out "outputs/eda_report.html"
 
-      - name: Upload EDA HTML report
-        uses: actions/upload-artifact@v4
-        with:
-          name: eda_report
-          path: outputs/eda_report.html
-          if-no-files-found: error
-
-      # ============================================================
-      # DATA PREPROCESSING BASED ON EDA
-      # ============================================================
-
-      - name: Data preprocessing based on EDA
+      - name: Data preprocessing
         run: |
           uv run --no-project python scripts/data_preprocessing_based_on_eda.py \
             --in "outputs/pm25_weather_daily_region_joined.csv" \
             --out "outputs/clean_dataset.csv"
 
-      - name: Upload clean dataset
+      # ============================================================
+      # SHIFT1 (PREVENT DATA LEAKAGE)
+      # ============================================================
+
+      - name: Apply shift1 to prevent data leakage
+        run: |
+          uv run --no-project python scripts/shift1_prevent_data_leakage.py \
+            --input "outputs/clean_dataset.csv" \
+            --output "outputs/model_ready_shift1.csv"
+
+      - name: Upload model_ready_shift1 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: clean_dataset
-          path: outputs/clean_dataset.csv
+          name: model_ready_shift1
+          path: outputs/model_ready_shift1.csv
           if-no-files-found: error
