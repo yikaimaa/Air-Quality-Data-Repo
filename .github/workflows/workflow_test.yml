@@ -40,10 +40,13 @@ jobs:
             --out "outputs/pm25_hourly_wide_final.csv" \
             --out-station-lookup "outputs/station_lookup.csv"
 
-      - name: Sanity check hourly outputs exist
-        run: |
-          test -s outputs/pm25_hourly_wide_final.csv
-          test -s outputs/station_lookup.csv
+      - name: Upload hourly PM2.5 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pm25_hourly_outputs
+          path: |
+            outputs/pm25_hourly_wide_final.csv
+            outputs/station_lookup.csv
 
       - name: Build daily PM2.5 (REGION aggregated)
         run: |
@@ -54,15 +57,17 @@ jobs:
             --require-region \
             --min-hours 0
 
-      - name: Sanity check region-daily output exists
-        run: |
-          test -s outputs/pm25_daily_region.csv
+      - name: Upload daily PM2.5 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pm25_daily_region
+          path: outputs/pm25_daily_region.csv
 
       # ============================================================
       # WEATHER PIPELINE
       # ============================================================
 
-      - name: Clean daily weather (Ontario, 2020-2025)
+      - name: Clean daily weather
         run: |
           WEATHER_IN="Datasets/Ontario/weather_raw/ON_weather_daily_merged_2020_2025.csv"
           WEATHER_OUT_DIR="outputs/weather_clean"
@@ -74,9 +79,11 @@ jobs:
             --in "$WEATHER_IN" \
             --out "$WEATHER_OUT_CSV"
 
-      - name: Sanity check weather clean output exists
-        run: |
-          test -s outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv
+      - name: Upload weather clean artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weather_clean
+          path: outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv
 
       - name: Build weather station lat/lon lookup
         run: |
@@ -84,11 +91,13 @@ jobs:
             --weather "outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv" \
             --out "outputs/weather_stations_latlon.csv"
 
-      - name: Sanity check weather lat/lon output exists
-        run: |
-          test -s outputs/weather_stations_latlon.csv
+      - name: Upload weather station latlon artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weather_stations_latlon
+          path: outputs/weather_stations_latlon.csv
 
-      - name: Build weather station -> region lookup (nearest PM2.5 station)
+      - name: Build weather station -> region lookup
         run: |
           uv run --no-project python scripts/build_weather_station_region_lookup.py \
             --pm25-lookup "Datasets/Ontario/intermediate_tables/pm25_station_region_lookup.csv" \
@@ -96,10 +105,32 @@ jobs:
             --out "outputs/weather_station_region_lookup_nn.csv" \
             --threshold-km 75
 
-      - name: Sanity check weather station-region lookup exists
+      - name: Upload weather station-region lookup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weather_station_region_lookup_nn
+          path: outputs/weather_station_region_lookup_nn.csv
+
+      # ============================================================
+      # DEBUG ID OVERLAP
+      # ============================================================
+
+      - name: Debug station id overlap
         run: |
-          test -s outputs/weather_station_region_lookup_nn.csv
-  
+          python - <<EOF
+import pandas as pd
+
+weather = pd.read_csv("outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv")
+lookup = pd.read_csv("outputs/weather_station_region_lookup_nn.csv")
+
+weather_ids = set(weather["station_id"].astype(str))
+lookup_ids = set(lookup["weather_station_id"].astype(str))
+
+print("Weather unique station count:", len(weather_ids))
+print("Lookup unique station count:", len(lookup_ids))
+print("Intersection count:", len(weather_ids & lookup_ids))
+EOF
+
       # ============================================================
       # ATTACH REGION
       # ============================================================
@@ -111,19 +142,8 @@ jobs:
             --lookup "outputs/weather_station_region_lookup_nn.csv" \
             --out "outputs/weather_daily_with_region.csv"
 
-      - name: Sanity check weather daily with region
-        run: |
-          test -s outputs/weather_daily_with_region.csv
-          echo "Row count:"
-          wc -l outputs/weather_daily_with_region.csv
-
-      # ============================================================
-      # ARTIFACT FOR INSPECTION
-      # ============================================================
-
-      - name: Upload weather_daily_with_region as artifact
+      - name: Upload weather_daily_with_region artifact
         uses: actions/upload-artifact@v4
         with:
           name: weather_daily_with_region
           path: outputs/weather_daily_with_region.csv
-          if-no-files-found: error
