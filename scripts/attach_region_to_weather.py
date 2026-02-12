@@ -22,30 +22,24 @@ def main() -> None:
     print("[INFO] Weather columns:", weather.columns.tolist())
     print("[INFO] Lookup columns:", lookup.columns.tolist())
 
-    # 自动找共同的 station 列
-    possible_cols = set(weather.columns).intersection(set(lookup.columns))
+    # 明确列名
+    if "station_id" not in weather.columns:
+        raise ValueError("Weather file must contain 'station_id'")
 
-    station_col = None
-    for col in possible_cols:
-        if "station" in col.lower():
-            station_col = col
-            break
-
-    if station_col is None:
-        raise ValueError(
-            f"Could not detect common station column. "
-            f"Weather columns={weather.columns.tolist()} "
-            f"Lookup columns={lookup.columns.tolist()}"
-        )
-
-    print(f"[INFO] Using station column: {station_col}")
+    if "weather_station_id" not in lookup.columns:
+        raise ValueError("Lookup file must contain 'weather_station_id'")
 
     if "assigned_region" not in lookup.columns:
-        raise ValueError("lookup file must contain column 'assigned_region'")
+        raise ValueError("Lookup file must contain 'assigned_region'")
+
+    # 强制类型一致（非常重要）
+    weather["station_id"] = weather["station_id"].astype(str)
+    lookup["weather_station_id"] = lookup["weather_station_id"].astype(str)
 
     merged = weather.merge(
-        lookup[[station_col, "assigned_region"]],
-        on=station_col,
+        lookup[["weather_station_id", "assigned_region"]],
+        left_on="station_id",
+        right_on="weather_station_id",
         how="left",
     )
 
