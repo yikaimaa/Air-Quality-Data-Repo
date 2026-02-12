@@ -65,10 +65,8 @@ jobs:
       - name: Clean daily weather (Ontario, 2020-2025)
         run: |
           WEATHER_IN="Datasets/Ontario/weather_raw/ON_weather_daily_merged_2020_2025.csv"
-
           WEATHER_OUT_DIR="outputs/weather_clean"
           WEATHER_OUT_CSV="$WEATHER_OUT_DIR/ON_weather_daily_merged_2020-2025_clean.csv"
-          WEATHER_OUT_ZIP="$WEATHER_OUT_DIR/ON_weather_daily_merged_2020-2025_clean.csv.zip"
 
           mkdir -p "$WEATHER_OUT_DIR"
 
@@ -76,13 +74,9 @@ jobs:
             --in "$WEATHER_IN" \
             --out "$WEATHER_OUT_CSV"
 
-          zip -j "$WEATHER_OUT_ZIP" "$WEATHER_OUT_CSV"
-
-      - name: Sanity check weather clean outputs
+      - name: Sanity check weather clean output exists
         run: |
           test -s outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv
-          test -s outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv.zip
-          ls -lh outputs/weather_clean
 
       - name: Build weather station lat/lon lookup
         run: |
@@ -94,16 +88,15 @@ jobs:
         run: |
           test -s outputs/weather_stations_latlon.csv
 
-      # ------------------------------------------------------------
-      # ARTIFACTS
-      # ------------------------------------------------------------
+      - name: Build weather station -> region lookup (nearest PM2.5 station)
+        run: |
+          uv run --no-project python scripts/build_weather_station_region_lookup.py \
+            --pm25-lookup "Datasets/Ontario/intermediate_tables/pm25_station_region_lookup.csv" \
+            --weather-latlon "outputs/weather_stations_latlon.csv" \
+            --out "outputs/weather_station_region_lookup_nn.csv" \
+            --threshold-km 75
 
-      - name: Upload current outputs as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipeline_outputs_step1
-          path: |
-            outputs/pm25_daily_region.csv
-            outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv
-            outputs/weather_stations_latlon.csv
-          if-no-files-found: error
+      - name: Sanity check weather station-region lookup exists
+        run: |
+          test -s outputs/weather_station_region_lookup_nn.csv
+          wc -l outputs/weather_station_region_lookup_nn.csv
