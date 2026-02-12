@@ -1,85 +1,71 @@
-"""
-Attach region to the daily weather table using the weather_station_region_lookup_nn table.
+# scripts/attach_region_to_weather.py
+from __future__ import annotations
 
-Inputs:
-- ../Datasets/Ontario/ON_weather_daily_merged_2020-2025_clean.csv
-- ../Datasets/Ontario/weather_station_region_lookup_nn.csv   (your NN lookup output)
-
-Output:
-- ../Datasets/Ontario/ON_weather_daily_merged_2020-2025_with_region.csv
-
-Notes:
-- We attach `assigned_region` -> `region`
-- We optionally drop stations that failed the NN threshold (within_threshold == False)
-  (default: keep only mapped stations; set KEEP_UNMAPPED=True to keep all with region=NA)
-"""
-
+import argparse
+from pathlib import Path
 import pandas as pd
 
-WEATHER_PATH = "../Datasets/Ontario/ON_weather_daily_merged_2020-2025_clean.csv"
-LOOKUP_PATH = "../Datasets/Ontario/weather_station_region_lookup_nn.csv"
-OUT_PATH = "../Datasets/Ontario/ON_weather_daily_merged_2020-2025_with_region.csv"
 
-KEEP_UNMAPPED = False  # set True if you want to keep stations with no region assignment
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Attach region to weather daily data using nearest-neighbour lookup."
+    )
 
+    parser.add_argument("--weather", required=True, help="Clean weather daily CSV")
+    parser.add_argument("--lookup", required=True, help="Weather station-region lookup CSV")
+    parser.add_argument("--out", required=True, help="Output CSV path")
 
-def main():
-    weather = pd.read_csv(WEATHER_PATH)
-    lookup = pd.read_csv(LOOKUP_PATH)
+    args = parser.parse_args()
 
-    # --- normalize keys ---
-    # Weather uses: station_id (int)
-    # Lookup uses: weather_station_id (string or int)
+    weather_path = Path(args.weather)
+    lookup_path = Path(args.lookup)
+    out_path = Path(args.out)
+
+    if not weather_path.exists():
+        raise FileNotFoundError(f"Weather file not found: {weather_path}")
+
+    if not lookup_path.exists():
+        raise FileNotFoundError(f"Lookup file not found: {lookup_path}")
+
+    print(f"[INFO] Reading weather: {weather_path}")
+    weather = pd.read_csv(weather_path)
+
+    print(f"[INFO] Reading lookup: {lookup_path}")
+    lookup = pd.read_csv(lookup_path)
+
+    # Standardize column names
+    weather.columns = weather.columns.str.strip()
+    lookup.columns = lookup.columns.str.strip()
+
+    # Expect station id column to exist
     if "station_id" not in weather.columns:
-        raise ValueError(f"Expected `station_id` in weather table. Found: {list(weather.columns)}")
+        raise ValueError("weather CSV must contain column 'station_id'")
 
-    if "weather_station_id" not in lookup.columns:
-        raise ValueError(
-            f"Expected `weather_station_id` in lookup table. Found: {list(lookup.columns)}"
-        )
+    if "station_id" not in lookup.columns:
+        raise ValueError("lookup CSV must contain column 'station_id'")
 
-    # Ensure compatible merge dtype
-    weather["station_id"] = pd.to_numeric(weather["station_id"], errors="coerce").astype("Int64")
-    lookup["weather_station_id"] = pd.to_numeric(lookup["weather_station_id"], errors="coerce").astype("Int64")
-
-    # Validate presence of region column in lookup
     if "assigned_region" not in lookup.columns:
-        raise ValueError(
-            "Expected `assigned_region` in lookup table (weather_station_region_lookup_nn). "
-            f"Found: {list(lookup.columns)}"
-        )
+        raise ValueError("lookup CSV must contain column 'assigned_region'")
 
-    # Optionally require threshold pass
-    if "within_threshold" in lookup.columns and not KEEP_UNMAPPED:
-        lookup_use = lookup.loc[lookup["within_threshold"] == True, ["weather_station_id", "assigned_region"]].copy()
-    else:
-        lookup_use = lookup[["weather_station_id", "assigned_region"]].copy()
+    # Merge
+    merged = weather.merge(
+        lookup[["station_id", "assigned_region"]],
+        on="station_id",
+        how="left",
+    )
 
-    lookup_use = lookup_use.rename(columns={"weather_station_id": "station_id", "assigned_region": "region"})
+    merged = merged.rename(columns={"assigned_region": "region"})
 
-    # --- merge ---
-    out = weather.merge(lookup_use, on="station_id", how="left")
+    # Check missing regions
+    missing = merged["region"].isna().sum()
+    if missing > 0:
+        print(f"[WARNING] {missing} rows have missing region")
 
-    if not KEEP_UNMAPPED:
-        # drop rows where no region could be assigned
-        out = out.dropna(subset=["region"]).copy()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # --- sanity checks ---
-    n_total = len(weather)
-    n_out = len(out)
-    n_unmapped = out["region"].isna().sum() if "region" in out.columns else None
-
-    print(f"Weather rows (input): {n_total:,}")
-    print(f"Weather rows (output): {n_out:,}")
-    if KEEP_UNMAPPED:
-        print(f"Unmapped rows kept (region is NA): {n_unmapped:,}")
-    else:
-        print("Unmapped rows dropped.")
-
-    # Save
-    out.to_csv(OUT_PATH, index=False)
-    print(f"Saved: {OUT_PATH}")
-    print("Example regions:", out["region"].astype(str).value_counts().head(10).to_dict())
+    merged.to_csv(out_path, index=False)
+    print(f"[OK] Wrote: {out_path}")
+    print(f"[INFO] Total rows: {len(merged)}")
 
 
 if __name__ == "__main__":
