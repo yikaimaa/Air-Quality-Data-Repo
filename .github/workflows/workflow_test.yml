@@ -59,14 +59,35 @@ jobs:
             --in "Datasets/Ontario/weather_raw/ON_weather_daily_merged_2020_2025.csv" \
             --out "outputs/weather_clean.csv"
 
+      - name: Build weather station lat/lon
+        run: |
+          uv run --no-project python scripts/build_weather_station_longlat.py \
+            --weather "outputs/weather_clean.csv" \
+            --out "outputs/weather_stations_latlon.csv"
+
+      - name: Build weather station -> region lookup
+        run: |
+          uv run --no-project python scripts/build_weather_station_region_lookup.py \
+            --pm25-lookup "Datasets/Ontario/intermediate_tables/pm25_station_region_lookup.csv" \
+            --weather-latlon "outputs/weather_stations_latlon.csv" \
+            --out "outputs/weather_station_region_lookup_nn.csv" \
+            --threshold-km 75
+
+      - name: Attach region to weather
+        run: |
+          uv run --no-project python scripts/attach_region_to_weather.py \
+            --weather "outputs/weather_clean.csv" \
+            --lookup "outputs/weather_station_region_lookup_nn.csv" \
+            --out "outputs/weather_daily_with_region.csv"
+
       - name: Build weather region daily
         run: |
           uv run --no-project python scripts/build_daily_weather_region.py \
-            --in "outputs/weather_clean.csv" \
+            --in "outputs/weather_daily_with_region.csv" \
             --out "outputs/weather_region_daily.csv"
 
       # ============================================================
-      # FINAL JOIN
+      # FINAL JOIN PIPELINE
       # ============================================================
 
       - name: Join PM2.5 and weather
@@ -77,23 +98,27 @@ jobs:
             --out "outputs/pm25_weather_daily_region_joined.csv"
 
       # ============================================================
-      # EDA + CLEAN
+      # EDA
       # ============================================================
 
-      - name: Run EDA report
+      - name: Run EDA quality report
         run: |
           uv run --no-project python scripts/eda_quality_report.py \
             --in "outputs/pm25_weather_daily_region_joined.csv" \
             --out "outputs/eda_report.html"
 
-      - name: Data preprocessing
+      # ============================================================
+      # DATA CLEANING
+      # ============================================================
+
+      - name: Data preprocessing based on EDA
         run: |
           uv run --no-project python scripts/data_preprocessing_based_on_eda.py \
             --in "outputs/pm25_weather_daily_region_joined.csv" \
             --out "outputs/clean_dataset.csv"
 
       # ============================================================
-      # SHIFT1 (PREVENT DATA LEAKAGE)
+      # SHIFT1 CAUSAL ALIGNMENT (PREVENT DATA LEAKAGE)
       # ============================================================
 
       - name: Apply shift1 to prevent data leakage
@@ -101,6 +126,10 @@ jobs:
           uv run --no-project python scripts/shift1_prevent_data_leakage.py \
             --input "outputs/clean_dataset.csv" \
             --output "outputs/model_ready_shift1.csv"
+
+      # ============================================================
+      # ARTIFACT UPLOAD
+      # ============================================================
 
       - name: Upload model_ready_shift1 artifact
         uses: actions/upload-artifact@v4
