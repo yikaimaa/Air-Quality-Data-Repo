@@ -46,7 +46,7 @@ import requests
 # Defaults
 # -------------------------
 DEFAULT_INPUT_DIR = Path("Datasets/Ontario/PM25")
-DEFAULT_BASE_RAW = "https://raw.githubusercontent.com/yikaimaa/Air-Quality-Data-Repo/main/Datasets/Ontario/PM25/"
+DEFAULT_BASE_RAW = "https://raw.githubusercontent.com/yikaimaa/Air-Quality-Data-Repo/main/Datasets/Ontario/PM25_raw/"
 DEFAULT_FILES = [
     "ON_PM25_2020-01-01_2020-12-31.csv",
     "ON_PM25_2021-01-01_2021-12-31.csv",
