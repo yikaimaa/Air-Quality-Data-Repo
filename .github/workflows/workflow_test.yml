@@ -8,6 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,8 +24,13 @@ jobs:
           uv venv
           uv pip install -r requirements.txt
 
-      - name: Basic import check (no project build)
-        run: uv run --no-project python -c "import numpy, pandas, requests"
+      - name: Basic import check
+        run: |
+          uv run --no-project python -c "import numpy, pandas, requests"
+
+      # ------------------------------------------------------------
+      # PM2.5 PIPELINE
+      # ------------------------------------------------------------
 
       - name: Build hourly PM2.5 (Ontario)
         run: |
@@ -34,14 +40,13 @@ jobs:
             --out "outputs/pm25_hourly_wide_final.csv" \
             --out-station-lookup "outputs/station_lookup.csv"
 
-      - name: Sanity check outputs exist
+      - name: Sanity check hourly outputs exist
         run: |
           test -s outputs/pm25_hourly_wide_final.csv
           test -s outputs/station_lookup.csv
 
       - name: Build daily PM2.5 (REGION aggregated)
         run: |
-          mkdir -p outputs
           uv run --no-project python scripts/build_daily_pm25_region.py \
             --in "outputs/pm25_hourly_wide_final.csv" \
             --out "outputs/pm25_daily_region.csv" \
@@ -51,46 +56,19 @@ jobs:
         run: |
           test -s outputs/pm25_daily_region.csv
 
-      - name: Debug locate station-year weather files
+      # ------------------------------------------------------------
+      # WEATHER PIPELINE
+      # ------------------------------------------------------------
+
+      - name: Clean daily weather (Ontario, 2020-2025)
         run: |
-          echo "== list top under Datasets/Ontario =="
-          ls -la Datasets/Ontario || true
+          WEATHER_IN="Datasets/Ontario/weather_raw/ON_weather_daily_merged_2020_2025.csv"
 
-          echo "== find any station_*_daily_2020.csv (sample) =="
-          find Datasets -maxdepth 8 -type f -name "station_*_daily_2020.csv" | head -n 20 || true
+          WEATHER_OUT_DIR="outputs/weather_clean"
+          WEATHER_OUT_CSV="$WEATHER_OUT_DIR/ON_weather_daily_merged_2020-2025_clean.csv"
+          WEATHER_OUT_ZIP="$WEATHER_OUT_DIR/ON_weather_daily_merged_2020-2025_clean.csv.zip"
 
-          echo "== find any *_daily_2020.csv (broader) =="
-          find Datasets -maxdepth 8 -type f -name "*_daily_2020.csv" | head -n 20 || true
-
-          echo "== find any station_* folders (sample) =="
-          find Datasets -maxdepth 6 -type d -name "station_*" | head -n 20 || true
-          
-      - name: Merge daily weather (Ontario, 2020-2025)
-        run: |
-          WEATHER_BASE="Datasets/Ontario/weather_raw_by_station"
-          IDS_FILE="scripts/on_station_ids.txt"
-
-          MERGED_DIR="outputs/weather_merged"
-          WEATHER_IN="outputs/weather_merged/ON_weather_daily_merged_2020_2025.csv"
-
-          mkdir -p "$MERGED_DIR"
-
-          uv run --no-project python scripts/weather_merge_by_year.py \
-            --base-dir "$WEATHER_BASE" \
-            --ids-file "$IDS_FILE" \
-            --years "2020-2025" \
-            --out-dir "$MERGED_DIR" \
-            --out-all "$WEATHER_IN"
-            - name: Clean daily weather (Ontario, 2020-2025)
-          run: |
-          # Input dataset produced by previous step
-          WEATHER_IN="outputs/weather_merged/ON_weather_daily_merged_2020_2025.csv"
-
-          # Clean outputs (workspace)
-          WEATHER_OUT_CSV="outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv"
-          WEATHER_OUT_ZIP="outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv.zip"
-
-          mkdir -p outputs/weather_clean
+          mkdir -p "$WEATHER_OUT_DIR"
 
           uv run --no-project python scripts/weather_clean.py \
             --in "$WEATHER_IN" \
@@ -98,52 +76,32 @@ jobs:
 
           zip -j "$WEATHER_OUT_ZIP" "$WEATHER_OUT_CSV"
 
-      - name: Sanity check weather clean ZIP exists
+      - name: Sanity check weather clean outputs
         run: |
-          test -s "outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv.zip"
-
-      # ------------------ NEW: weather scripts ------------------
+          test -s outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv
+          test -s outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv.zip
+          ls -lh outputs/weather_clean
 
       - name: Build weather station lat/lon lookup
         run: |
-          mkdir -p outputs
           uv run --no-project python scripts/build_weather_station_longlat.py \
-            --weather "Datasets/Ontario/ON_weather_daily_merged_2020-2025_clean.csv" \
+            --weather "outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv" \
             --out "outputs/weather_stations_latlon.csv"
 
       - name: Sanity check weather lat/lon output exists
         run: |
           test -s outputs/weather_stations_latlon.csv
 
-      - name: Build weather station -> region lookup (nearest PM2.5 station)
-        run: |
-          mkdir -p outputs
-          uv run --no-project python scripts/build_weather_station_region_lookup.py \
-            --pm25-lookup "Datasets/Ontario/processed_datasets/pm25_station_region_lookup.csv" \
-            --weather-latlon "outputs/weather_stations_latlon.csv" \
-            --out "outputs/weather_station_region_lookup_nn.csv" \
-            --threshold-km 75
+      # ------------------------------------------------------------
+      # ARTIFACTS
+      # ------------------------------------------------------------
 
-      - name: Sanity check weather station-region lookup exists
-        run: |
-          test -s outputs/weather_station_region_lookup_nn.csv
-
-      - name: Build joined table
-        run: |
-          mkdir -p outputs
-          uv run --no-project python scripts/pm25_weather_region_join.py \
-            --pm25 "outputs/pm25_daily_region.csv" \
-            --weather "Datasets/Ontario/processed_datasets/ON_weather_daily_merged_2020-2025_with_region.csv" \
-            --out "outputs/pm25_weather_daily_region_joined.csv" \
-      # ------------------ artifacts ------------------
-
-      - name: Output artifacts (pm25 + weather lookups)
+      - name: Upload current outputs as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: data_outputs
+          name: pipeline_outputs_step1
           path: |
             outputs/pm25_daily_region.csv
+            outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv
             outputs/weather_stations_latlon.csv
-            outputs/weather_station_region_lookup_nn.csv
-            outputs/pm25_weather_daily_region_joined.csv
           if-no-files-found: error
