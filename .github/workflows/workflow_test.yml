@@ -32,7 +32,7 @@ jobs:
       # PM2.5 PIPELINE
       # ============================================================
 
-      - name: Build hourly PM2.5 (Ontario)
+      - name: Build hourly PM2.5
         run: |
           mkdir -p outputs
           uv run --no-project python scripts/build_hourly_pm25.py \
@@ -49,7 +49,7 @@ jobs:
             outputs/station_lookup.csv
           if-no-files-found: error
 
-      - name: Build daily PM2.5 (REGION aggregated)
+      - name: Build daily PM2.5 (region)
         run: |
           uv run --no-project python scripts/build_daily_pm25_region.py \
             --in "outputs/pm25_hourly_wide_final.csv" \
@@ -71,15 +71,10 @@ jobs:
 
       - name: Clean daily weather
         run: |
-          WEATHER_IN="Datasets/Ontario/weather_raw/ON_weather_daily_merged_2020_2025.csv"
-          WEATHER_OUT_DIR="outputs/weather_clean"
-          WEATHER_OUT_CSV="$WEATHER_OUT_DIR/ON_weather_daily_merged_2020-2025_clean.csv"
-
-          mkdir -p "$WEATHER_OUT_DIR"
-
+          mkdir -p outputs/weather_clean
           uv run --no-project python scripts/weather_clean.py \
-            --in "$WEATHER_IN" \
-            --out "$WEATHER_OUT_CSV"
+            --in "Datasets/Ontario/weather_raw/ON_weather_daily_merged_2020_2025.csv" \
+            --out "outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv"
 
       - name: Upload weather_clean artifact
         uses: actions/upload-artifact@v4
@@ -88,7 +83,7 @@ jobs:
           path: outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv
           if-no-files-found: error
 
-      - name: Build weather station lat/lon lookup
+      - name: Build weather station lat/lon
         run: |
           uv run --no-project python scripts/build_weather_station_longlat.py \
             --weather "outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv" \
@@ -116,7 +111,7 @@ jobs:
           path: outputs/weather_station_region_lookup_nn.csv
           if-no-files-found: error
 
-      - name: Attach region to weather daily
+      - name: Attach region to weather
         run: |
           uv run --no-project python scripts/attach_region_to_weather.py \
             --weather "outputs/weather_clean/ON_weather_daily_merged_2020-2025_clean.csv" \
@@ -130,10 +125,6 @@ jobs:
           path: outputs/weather_daily_with_region.csv
           if-no-files-found: error
 
-      # ============================================================
-      # REGION-LEVEL WEATHER AGGREGATION
-      # ============================================================
-
       - name: Build weather region daily
         run: |
           uv run --no-project python scripts/build_daily_weather_region.py \
@@ -145,4 +136,22 @@ jobs:
         with:
           name: weather_region_daily
           path: outputs/weather_region_daily.csv
+          if-no-files-found: error
+
+      # ============================================================
+      # FINAL JOIN PIPELINE
+      # ============================================================
+
+      - name: Join PM2.5 and weather
+        run: |
+          uv run --no-project python scripts/build_pm25_weather_join.py \
+            --pm25 "outputs/pm25_daily_region.csv" \
+            --weather "outputs/weather_region_daily.csv" \
+            --out "outputs/pm25_weather_daily_region_joined.csv"
+
+      - name: Upload joined artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pm25_weather_daily_region_joined
+          path: outputs/pm25_weather_daily_region_joined.csv
           if-no-files-found: error
