@@ -103,4 +103,7 @@ Several limitations warrant discussion. Forecast uncertainty increases during ab
 Methodologically, further gains may be achieved by incorporating explicit region or station identifiers via embeddings, adopting loss functions that emphasize high-pollution days, and reporting stratified performance metrics across pollution regimes. Despite these limitations, the proposed framework demonstrates that policy-ready, leakage-safe next-day PM2.5 forecasting is feasible and can meaningfully support proactive decision-making in education systems.
 
 
+\newpage
 
+
+# References
