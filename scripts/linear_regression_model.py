@@ -7,6 +7,8 @@ from sklearn.linear_model import LassoCV
 from sklearn.metrics import mean_squared_error, r2_score
 import os
 import argparse
+import joblib
+
 
 
 
@@ -57,6 +59,7 @@ TRAIN_FRAC = 0.8
 
 results = {}
 selected_features = {}
+all_coefficients = []  
 
 # -------------------------
 # Region-wise modeling
@@ -104,15 +107,32 @@ for region, g in df.groupby("region"):
     lasso = pipe.named_steps["lasso"]
     coef = pd.Series(lasso.coef_, index=X.columns)
     sel = coef[coef != 0].sort_values(key=np.abs, ascending=False)
+    # 保存完整系数（包含0）
+    for feature, value in coef.items():
+        all_coefficients.append({
+            "region": region,
+            "feature": feature,
+            "coef": value
+        })
+
+    # 保存模型（包含 scaler + lasso）
+    model_dir = os.path.join(OUTPUT_DIR, "models")
+    os.makedirs(model_dir, exist_ok=True)
+
+    model_path = os.path.join(model_dir, f"lasso_model_{region}.pkl")
+    joblib.dump(pipe, model_path)
+
 
     results[region] = {
-        "n_train": len(X_train),
-        "n_test": len(X_test),
-        "rmse": rmse,
-        "r2": r2,
-        "alpha": lasso.alpha_,
-        "n_selected_features": len(sel)
+    "n_train": len(X_train),
+    "n_test": len(X_test),
+    "rmse": rmse,
+    "r2": r2,
+    "alpha": lasso.alpha_,
+    "intercept": lasso.intercept_, 
+    "n_selected_features": len(sel)
     }
+
 
 
     selected_features[region] = sel
@@ -144,3 +164,13 @@ features_path = os.path.join(OUTPUT_DIR, "all_selected_features.csv")
 all_selected_df.to_csv(features_path, index=False)
 
 print(f"Saved: {features_path}")
+# -------------------------
+# Save ALL coefficients (including zeros)
+# -------------------------
+all_coef_df = pd.DataFrame(all_coefficients)
+
+coef_path = os.path.join(OUTPUT_DIR, "all_coefficients.csv")
+all_coef_df.to_csv(coef_path, index=False)
+
+print(f"Saved: {coef_path}")
+
