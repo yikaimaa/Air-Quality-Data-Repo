@@ -103,11 +103,10 @@ jobs:
 
       - name: Run EDA
         run: |
-          mkdir -p outputs/eda
-          uv run --no-project python scripts/eda.py \
-            --in outputs/pm25_weather_daily_region_joined.csv \
-            --out-html outputs/eda/eda_summary.html \
-            --out-dir outputs/eda
+         mkdir -p outputs/eda
+         uv run --no-project python scripts/eda.py \
+           --in outputs/pm25_weather_daily_region_joined.csv \
+           --out-html outputs/eda/eda_summary.html
 
       - name: Upload EDA artifacts
         uses: actions/upload-artifact@v4
@@ -115,7 +114,7 @@ jobs:
           name: eda_outputs
           path: outputs/eda/
           if-no-files-found: error
-
+          
       # ============================================================
       # Filling the time series from 2020-01-01 to 2024-12-31
       # ============================================================
