@@ -194,3 +194,29 @@ jobs:
           name: final_model_table
           path: outputs/final_model_table.csv
           if-no-files-found: error
+
+    # ============================================================
+    # LSTM MODEL TRAINING (NEW)
+    # ============================================================
+
+      - name: Train LSTM model (next-day PM2.5)
+        run: |
+          uv run --no-project python scripts/lstm_train_pm25_nextday.py \
+            --run lstm \
+            --seq-len 14 \
+            --npz-path outputs/lstm_dataset_seq14.npz \
+            --out-dir outputs \
+            --epochs 50 \
+            --hidden-size 128 \
+            --loss huber
+
+      - name: Upload LSTM training outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: lstm_training_outputs
+          path: |
+            outputs/metrics_lstm.json
+            outputs/feature_importance_lstm_permutation.csv
+            outputs/lstm_summary.json
+            outputs/*.pt
+          if-no-files-found: error
