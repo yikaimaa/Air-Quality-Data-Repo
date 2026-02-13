@@ -6,9 +6,15 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from statsmodels.tsa.stattools import adfuller, acf
 import seaborn as sns
+from statsmodels.tsa.stattools import adfuller, acf
 from datetime import datetime
+
+
+def save_plot(fig, path):
+    fig.tight_layout()
+    fig.savefig(path, dpi=300)
+    plt.close(fig)
 
 
 def main():
@@ -26,184 +32,164 @@ def main():
     fig_dir = out_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
 
-    print("\n==============================")
-    print("EDA STARTED")
-    print("==============================")
+    # ==========================================================
+    # BASIC INFO
+    # ==========================================================
+    n_rows = len(df)
+    n_cols = len(df.columns)
+
+    dup_total = df.duplicated().sum()
+    dup_key = df.duplicated(subset=["region", "date"]).sum()
+
+    overall_missing = df.isna().mean().mean()
 
     # ==========================================================
-    # 1️⃣ Missing Profiling
+    # MISSING ANALYSIS
     # ==========================================================
-
-    print("\n===== MISSING RATE BY COLUMN =====")
     missing_rate = df.isna().mean().sort_values(ascending=False)
-    print(missing_rate)
+    row_missing_dist = df.isna().sum(axis=1).value_counts().sort_index()
 
-    print("\n===== ROW-WISE MISSING COUNT DISTRIBUTION =====")
-    row_missing = df.isna().sum(axis=1)
-    print(row_missing.value_counts().sort_index())
-
-    print("\n===== MISSING RATE OVER REGION =====")
     missing_region = df.groupby("region").apply(lambda x: x.isna().mean().mean())
-    print(missing_region)
-
-    print("\n===== MISSING RATE OVER DATE =====")
     missing_date = df.groupby("date").apply(lambda x: x.isna().mean().mean())
-    print(missing_date.head())
 
-    print("\n===== DUPLICATE CHECK =====")
-    print("Total duplicate rows:", df.duplicated().sum())
-    print("Duplicate (region,date):", df.duplicated(subset=["region","date"]).sum())
-
-    print("\n===== ALL-ZERO COLUMN CHECK =====")
-    numeric_df = df.select_dtypes(include="number")
-    zero_cols = numeric_df.columns[(numeric_df == 0).all()].tolist()
-    print("All-zero columns:", zero_cols if zero_cols else "None")
-
-    # Date completeness
-    print("\n===== DATE COMPLETENESS CHECK =====")
-    start = datetime(2020,1,1)
-    end = datetime(2024,12,31)
-    full_range = pd.date_range(start, end, freq="D")
-
-    region_date_missing = {}
-    for region in df["region"].unique():
-        sub = df[df["region"] == region]
-        region_date_missing[region] = len(set(full_range) - set(sub["date"]))
-    print(region_date_missing)
-
-    # --- Save Missing Plots ---
-    plt.figure()
+    fig = plt.figure()
     missing_region.plot(kind="bar")
     plt.title("Missing Rate by Region")
     plt.ylabel("Missing Rate")
-    plt.tight_layout()
-    plt.savefig(fig_dir/"missing_rate_region.png", dpi=300)
-    plt.close()
+    save_plot(fig, fig_dir/"missing_rate_region.png")
 
-    plt.figure()
+    fig = plt.figure()
     missing_date.plot()
-    plt.title("Missing Rate over Time")
+    plt.title("Missing Rate Over Time")
     plt.ylabel("Missing Rate")
-    plt.tight_layout()
-    plt.savefig(fig_dir/"missing_rate_time.png", dpi=300)
-    plt.close()
+    save_plot(fig, fig_dir/"missing_rate_time.png")
 
     # ==========================================================
-    # 2️⃣ Target Behavior Analysis
+    # TARGET BEHAVIOR
     # ==========================================================
-
     pm_col = "pm25_region_daily_avg"
     pm = df[pm_col]
 
-    print("\n===== PM25 BASIC STATS =====")
-    print(pm.describe())
-    print("Variance:", pm.var())
-    print("Skewness:", pm.skew())
-    print("Kurtosis:", pm.kurt())
+    pm_stats = pm.describe()
+    pm_var = pm.var()
+    pm_skew = pm.skew()
+    pm_kurt = pm.kurt()
 
-    # Distribution
-    plt.figure()
+    fig = plt.figure()
     pm.hist(bins=50)
     plt.title("PM25 Distribution")
     plt.xlabel("PM25")
-    plt.ylabel("Frequency")
-    plt.tight_layout()
-    plt.savefig(fig_dir/"pm25_distribution.png", dpi=300)
-    plt.close()
+    save_plot(fig, fig_dir/"pm25_distribution.png")
 
-    # Ontario average trend
     ontario_avg = df.groupby("date")[pm_col].mean()
 
-    plt.figure()
+    fig = plt.figure()
     ontario_avg.plot()
     plt.title("Ontario Average PM25 Over Time")
-    plt.ylabel("PM25")
-    plt.tight_layout()
-    plt.savefig(fig_dir/"pm25_trend.png", dpi=300)
-    plt.close()
+    save_plot(fig, fig_dir/"pm25_trend.png")
 
-    # ADF Test
-    adf_result = adfuller(ontario_avg.dropna())
-    print("\n===== ADF TEST (Ontario Avg) =====")
-    print("ADF Statistic:", adf_result[0])
-    print("p-value:", adf_result[1])
+    adf_stat, adf_p = adfuller(ontario_avg.dropna())[0:2]
 
-    # Region comparison
     region_mean = df.groupby("region")[pm_col].mean()
 
-    plt.figure(figsize=(10,5))
+    fig = plt.figure(figsize=(10,5))
     region_mean.sort_values().plot(kind="bar")
     plt.title("Average PM25 by Region")
-    plt.tight_layout()
-    plt.savefig(fig_dir/"pm25_region_mean.png", dpi=300)
-    plt.close()
+    save_plot(fig, fig_dir/"pm25_region_mean.png")
 
-    # Variance decomposition
     overall_var = pm.var()
     between_var = region_mean.var()
     within_var = df.groupby("region")[pm_col].var().mean()
 
-    print("\n===== VARIANCE DECOMPOSITION =====")
-    print("Overall variance:", overall_var)
-    print("Between-region variance:", between_var)
-    print("Within-region variance:", within_var)
-
-    # Heavy tail risk
     threshold = 35
     extreme_prob = (pm > threshold).mean()
-    print("\n===== HEAVY TAIL RISK =====")
-    print(f"P(PM25 > {threshold}) =", extreme_prob)
 
     # ==========================================================
-    # 3️⃣ Autocorrelation
+    # AUTOCORRELATION
     # ==========================================================
-
     lag_corr = [ontario_avg.autocorr(lag=i) for i in range(1,15)]
-    print("\n===== LAG 1–14 CORRELATION =====")
-    print(lag_corr)
 
     acf_vals = acf(ontario_avg.dropna(), nlags=20)
 
-    plt.figure()
+    fig = plt.figure()
     plt.stem(acf_vals)
     plt.title("ACF (Ontario Avg)")
-    plt.tight_layout()
-    plt.savefig(fig_dir/"acf.png", dpi=300)
-    plt.close()
+    save_plot(fig, fig_dir/"acf.png")
 
     # ==========================================================
-    # 4️⃣ Correlation Heatmap
+    # CORRELATION HEATMAP
     # ==========================================================
-
     numeric_df = df.select_dtypes(include="number")
     corr = numeric_df.corr()
 
-    plt.figure(figsize=(10,8))
+    fig = plt.figure(figsize=(10,8))
     sns.heatmap(corr, cmap="coolwarm", center=0)
     plt.title("Correlation Heatmap")
-    plt.tight_layout()
-    plt.savefig(fig_dir/"correlation_heatmap.png", dpi=300)
-    plt.close()
+    save_plot(fig, fig_dir/"correlation_heatmap.png")
 
     # ==========================================================
-    # HTML Summary
+    # WORKFLOW PRINT
     # ==========================================================
+    print("\n===== EDA SUMMARY =====")
+    print("Rows:", n_rows)
+    print("Columns:", n_cols)
+    print("Total duplicates:", dup_total)
+    print("Overall missing rate:", round(overall_missing,4))
+    print("ADF p-value:", round(adf_p,6))
+    print("P(PM25 > 35):", round(extreme_prob,4))
+    print("Variance decomposition:")
+    print("  Overall:", round(overall_var,4))
+    print("  Between:", round(between_var,4))
+    print("  Within:", round(within_var,4))
+    print("Lag1 correlation:", round(lag_corr[0],4))
+    print("=======================\n")
 
+    # ==========================================================
+    # FULL HTML SUMMARY
+    # ==========================================================
     html = f"""
     <html>
     <body>
     <h1>EDA Summary</h1>
-    <h2>PM25 Summary Stats</h2>
-    {pm.describe().to_frame().to_html()}
-    <h2>ADF Test</h2>
-    <p>ADF Statistic: {adf_result[0]}</p>
-    <p>p-value: {adf_result[1]}</p>
+
+    <h2>Basic Info</h2>
+    <p>Rows: {n_rows}</p>
+    <p>Columns: {n_cols}</p>
+    <p>Total duplicates: {dup_total}</p>
+
+    <h2>Missing Analysis</h2>
+    {missing_rate.to_frame("missing_rate").to_html()}
+    {row_missing_dist.to_frame("count").to_html()}
+    <img src="figures/missing_rate_region.png">
+    <img src="figures/missing_rate_time.png">
+
+    <h2>Target Behavior</h2>
+    {pm_stats.to_frame().to_html()}
+    <p>Variance: {pm_var}</p>
+    <p>Skewness: {pm_skew}</p>
+    <p>Kurtosis: {pm_kurt}</p>
+    <img src="figures/pm25_distribution.png">
+    <img src="figures/pm25_trend.png">
+    <img src="figures/pm25_region_mean.png">
+
+    <h2>Stationarity</h2>
+    <p>ADF Statistic: {adf_stat}</p>
+    <p>p-value: {adf_p}</p>
+
     <h2>Heavy Tail Risk</h2>
     <p>P(PM25 > {threshold}) = {extreme_prob}</p>
+
     <h2>Variance Decomposition</h2>
     <p>Overall: {overall_var}</p>
     <p>Between: {between_var}</p>
     <p>Within: {within_var}</p>
+
+    <h2>Autocorrelation</h2>
+    <img src="figures/acf.png">
+
+    <h2>Correlation Heatmap</h2>
+    <img src="figures/correlation_heatmap.png">
+
     </body>
     </html>
     """
@@ -212,10 +198,7 @@ def main():
     with open(args.out_html, "w") as f:
         f.write(html)
 
-    print("\nEDA COMPLETED")
-    print("==============================")
-    print("Figures saved to:", fig_dir)
-    print("HTML saved to:", args.out_html)
+    print("EDA completed. Outputs saved to:", out_dir)
 
 
 if __name__ == "__main__":
