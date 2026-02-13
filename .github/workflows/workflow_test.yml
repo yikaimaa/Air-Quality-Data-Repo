@@ -101,7 +101,7 @@ jobs:
       # EDA
       # ============================================================
 
-      - name: Run Overall EDA
+      - name: Run EDA
         run: |
           mkdir -p outputs/eda
           uv run --no-project python scripts/eda.py \
