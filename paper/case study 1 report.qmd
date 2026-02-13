@@ -1,9 +1,9 @@
 ---
 title: "Air Quality Analysis"
-subtitle: "Findings Reveal Vaccination and Healthcare Spending as Key Drivers of Mortality Reduction"
+subtitle: "Supporting Proactive Air-Quality Decisions in Ontario Schools"
 author:
   - name: Junbo Li, Yikai Ma, Yuhan Fu, Ruolong Zhang, 
-abstract: "123"
+abstract: "Climate-driven increases in wildfire activity have led to more frequent short-term spikes in fine particulate matter (PM2.5), posing growing risks to children’s health and challenging the ability of education systems to respond proactively. This study evaluates whether next-day (24-hour mean) PM2.5 concentrations in Ontario can be predicted using routinely available meteorological and traffic-related data. We construct a leakage-safe, region-level dataset combining PM2.5 measurements with cleaned and spatially aligned weather observations. A transparent region-wise LASSO baseline is compared with a nonlinear Long Short-Term Memory (LSTM) model under a strict time-aware evaluation framework. While the LASSO captures linear and seasonal effects (mean test R² ≈ 0.25), the LSTM substantially improves predictive performance (R² = 0.36), outperforming persistence baselines. Results demonstrate the feasibility of policy-ready next-day PM2.5 forecasting to support proactive air-quality decision-making in schools."
 format: pdf
 date: today
 date-format: long
@@ -14,20 +14,19 @@ toc: true
 
 # Introduction
 
-
 Over the past several decades, advances in environmental regulation, emissions controls, and monitoring technologies have led to substantial improvements in air quality across many regions. In high-income countries, long-term declines in fine particulate matter (PM2.5) concentrations have contributed to reductions in pollution-related morbidity and mortality, representing a major public-health achievement, particularly for children [@who2021air].
 
-Despite this progress, recent years have seen stagnation and episodic reversals in air-quality improvements. Since approximately 2015, climate-driven factors—most notably increasingly severe and frequent wildfires—have become a dominant source of extreme PM2.5 exposure [@reid2016wildfire]. In Canada, wildfire smoke has repeatedly affected population centres far from fire origins, including the Greater Toronto Area and Ottawa–Gatineau, resulting in prolonged periods of hazardous air quality that strain existing public-health response systems.
+Despite this progress, recent years have seen stagnation and episodic reversals in air-quality improvements. Since approximately 2015, climate-driven factors—most notably increasingly severe and frequent wildfires—have emerged as a dominant source of extreme PM2.5 exposure [@reid2016wildfire]. In Canada, wildfire smoke has repeatedly affected population centres far from fire origins, including the Greater Toronto Area and Ottawa–Gatineau, resulting in prolonged periods of hazardous air quality that strain existing public-health response systems.
 
-The health and operational impacts of poor air quality are unevenly distributed. Children are particularly vulnerable due to developing respiratory systems and higher relative inhalation rates, and exposure to elevated PM2.5 is strongly linked to adverse respiratory and cardiovascular outcomes [@brook2010particulate]. At the institutional level, preparedness also varies across regions. Many education systems continue to rely on same-day or reactive air-quality advisories, leaving limited time for schools to adjust outdoor activities, ventilation strategies, transportation, and communications, thereby increasing disruption during air-quality emergencies.
+The health and operational impacts of poor air quality are unevenly distributed. Children are particularly vulnerable due to developing respiratory systems and higher relative inhalation rates, and exposure to elevated PM2.5 is strongly linked to adverse respiratory and cardiovascular outcomes [@brook2010particulate]. At the institutional level, preparedness also varies substantially across regions. Many education systems continue to rely on same-day or reactive air-quality advisories, leaving limited time for schools to adjust outdoor activities, ventilation strategies, transportation logistics, and communications. This reactive posture increases disruption and limits the effectiveness of mitigation during air-quality emergencies.
 
-Short-term air quality is shaped by a combination of atmospheric conditions and human activity. Meteorological variables such as wind, temperature, humidity, and precipitation influence pollutant dispersion, while traffic remains a major local contributor to PM2.5 concentrations. Prior work suggests that incorporating meteorological and traffic information can improve short-horizon air-quality forecasts beyond persistence and classical time-series approaches [@cheng2021forecasting]. However, the policy relevance of these improvements—particularly for next-day decision-making in education systems—remains insufficiently examined.
+Short-term air quality is shaped by a combination of atmospheric conditions and human activity. Meteorological variables such as wind, temperature, humidity, and precipitation influence pollutant dispersion and accumulation, while traffic remains a major local contributor to PM2.5 concentrations. Prior work suggests that incorporating meteorological and traffic information can improve short-horizon air-quality forecasts beyond persistence and classical time-series approaches [@cheng2021forecasting]. However, the policy relevance of these improvements—particularly for next-day decision-making in education systems—remains insufficiently examined.
 
 In this study, we assess whether next-day PM2.5 (24-hour mean) can be reliably predicted using routinely available traffic and weather data, and whether these forecasts can be translated into actionable next-day air-quality alerts. The primary stakeholder for this work is Provincial Ministries of Education, particularly policy, analytics, and student well-being units responsible for issuing guidance to school boards during environmental health events. We find that incorporating traffic and meteorological predictors improves forecasting performance relative to persistence and classical baselines and supports the construction of transparent alerting systems that balance recall and precision.
 
-The estimand of this study is the effect of lagged air-quality measures, meteorological variables, and traffic indicators on next-day PM2.5 concentrations at the station or regional level. By quantifying these relationships, this analysis evaluates the feasibility of a short-horizon, policy-ready forecasting and alerting framework to support proactive and equitable decision-making during air-quality emergencies affecting schools.
+The estimand of this study is the effect of lagged air-quality measures, meteorological variables, and traffic indicators on next-day PM2.5 concentrations at the regional level. By quantifying these relationships, this analysis evaluates the feasibility of a short-horizon, policy-ready forecasting and alerting framework to support proactive and equitable decision-making during air-quality emergencies affecting schools.
 
-The remainder of this paper is organized as follows. @sec-data describes the data sources, spatial alignment, and preprocessing steps. @sec-model outlines the modeling and validation strategy. @sec-results presents forecasting and alerting performance results by season and region. Finally, @sec-diss discusses policy implications, limitations, and directions for future work.
+The remainder of this paper is organized as follows. @sec-data describes the data sources, spatial alignment, and preprocessing steps. @sec-model outlines the modeling and validation strategy. @sec-results presents forecasting and alerting performance results. Finally, @sec-diss discusses policy implications, limitations, and directions for future work.
 
 # Data {#sec-data}
 
@@ -35,44 +34,73 @@ The remainder of this paper is organized as follows. @sec-data describes the dat
 
 This study integrates air quality and meteorological data for Ontario to construct an analysis-ready dataset for next-day PM2.5 forecasting. All datasets are publicly available and provided by provincial or federal agencies under open data licenses. Data access and preprocessing were designed to be reproducible, with scripted workflows used wherever possible.
 
-Hourly PM2.5 concentration data were obtained from Air Quality Ontario, operated by the Ontario Ministry of the Environment, Conservation and Parks (MECP) [@airqualityontario]. The dataset contains historical PM2.5 measurements collected at fixed ambient air monitoring stations across the province. Data are accessible through a web-based interface that supports CSV downloads by station and time range, subject to request limits.
+Hourly PM2.5 concentration data were obtained from Air Quality Ontario, operated by the Ontario Ministry of the Environment, Conservation and Parks (MECP) [@airqualityontario]. The dataset contains historical PM2.5 measurements collected at fixed ambient air monitoring stations across the province. Data are accessible through a web-based interface that supports CSV downloads by station and time range.
 
-Meteorological data were obtained using scripted downloads from publicly available weather monitoring sources corresponding to Ontario stations [@ecccweather]. Variables include temperature, wind speed and direction, precipitation, and other atmospheric measures commonly used in air quality modeling. Automated scripts were used to retrieve multi-year weather data, standardize timestamp formats, and validate schema consistency across files. Weather observations were temporally aligned with PM2.5 measurements at the daily level and spatially matched to air quality monitoring locations or aggregated regions using geographic coordinates.
+Meteorological data were obtained using scripted downloads from publicly available weather monitoring sources corresponding to Ontario stations [@ecccweather]. Variables include temperature, wind speed and direction, precipitation, and other atmospheric measures commonly used in air-quality modeling. Automated pipelines were used to retrieve multi-year weather data, standardize timestamp formats, and validate schema consistency across files.
 
-Across both datasets, preprocessing steps included timestamp standardization, removal or recoding of invalid values, and harmonization of spatial identifiers to support station-level and region-level analysis. The resulting dataset provides a consistent foundation for evaluating next-day PM2.5 forecasting models and downstream alerting performance.
+Weather observations were temporally aligned with PM2.5 measurements at the daily level and spatially matched to air-quality monitoring locations or aggregated regions using geographic coordinates. Across both datasets, preprocessing included timestamp standardization, removal or recoding of invalid values, and harmonization of spatial identifiers to support region-level analysis.
 
-## Cleaning and transformation
+## Weather Data Cleaning
 
+Daily weather station data from 2020–2025 were cleaned into an analysis-ready station–day table and a station-level missingness summary. Cleaning steps included standardized column naming, resolution of duplicate fields, normalization of station identifiers, numeric coercion with invalid entries set to missing, and engineering of quality indicators from metadata flags. Physical plausibility bounds were applied to detect and flag outliers, and records were deduplicated to enforce one observation per station per day. A station-level missing-rate table was constructed to support data quality screening.
 
-## EDA
+## PM2.5 Data Cleaning
 
+Hourly PM2.5 data from January 1, 2020 to December 31, 2024 were consolidated into a unified dataset with standardized formats. Daily PM2.5 concentrations were computed using available hourly measurements; days with entirely missing hourly values were retained as missing rather than imputed. Each monitoring station was mapped to its corresponding Ontario administrative region using official metadata, enabling aggregation from station-level readings to region-day averages.
+
+The PM2.5 and weather datasets were merged by region and date. All region-day PM2.5 observations were retained; when weather data were unavailable for a given region-day, weather variables were recorded as missing rather than dropping the observation. This design ensures that pollution events are not systematically excluded during integration.
+
+## Exploratory Data Analysis
+
+The integrated dataset contains 51,830 region-day observations with strong coverage; PM2.5 exhibits only 0.4% missingness. The distribution of daily PM2.5 is highly right-skewed, with occasional extreme values exceeding 400 µg/m³, indicating that air-quality risk is driven by rare but severe events. Regional heterogeneity is pronounced, with southern and industrialized regions exhibiting higher average concentrations.
+
+Temporal diagnostics reveal strong short-term persistence, with lag-1 autocorrelation around 0.72, and a moderate correlation between current and next-day PM2.5 (r ≈ 0.57). Meteorological variables show meaningful associations: wind speed and precipitation are negatively correlated with PM2.5, while temperature is positively correlated. An Augmented Dickey–Fuller test rejects the unit-root hypothesis (p < 0.001), suggesting no long-term explosive trend.
+
+These patterns motivate models that incorporate temporal dependence, seasonality, and meteorological drivers while remaining robust to heavy-tailed outcomes.
+
+## Feature Engineering
+
+To capture temporal structure while strictly avoiding data leakage, all features were constructed using past information only. Lagged PM2.5 values and rolling statistics were generated to capture persistence and short-term trends. Aggregated and lagged weather variables were created to reflect delayed meteorological effects, and seasonal cycles were encoded using cyclical time features. Rows with incomplete feature histories were removed to preserve temporal integrity.
 
 # Model {#sec-model}
 
 ## LASSO Baseline Model {#sec-lasso-model}
 
-We implemented a time-aware, region-wise LASSO regression as a linear baseline for PM2.5 prediction. The response variable was daily PM2.5 concentration (pm25_label). To account for spatial heterogeneity and avoid information sharing across geographically distinct areas, separate models were trained for each region.
+We implemented a time-aware, region-wise LASSO regression as a transparent linear baseline. Separate models were trained for each region to account for spatial heterogeneity. Predictors were standardized within a pipeline, and non-predictive identifiers were excluded.
 
-For each region, observations were ordered chronologically by date. Non-predictive identifiers, geographic coordinates, and the response variable were excluded from the feature set, and only numeric predictors were retained. Rows with missing values in either predictors or the response were removed to ensure a valid design matrix. All predictors were standardized using z-score normalization prior to model fitting. Standardization was performed within a scikit-learn pipeline to ensure that scaling parameters were learned exclusively from the training data, thereby preventing data leakage.
+A strict chronological split was applied within each region, with the first 80% of observations used for training and the remaining 20% reserved for testing. The regularization parameter was selected via five-fold cross-validation on the training set. The L1 penalty induces sparsity, enabling automatic feature selection and interpretability.
 
-A strict time-based split was applied within each region, with the first 80% of observations used for training and the remaining 20% reserved for testing. Model estimation was performed using LASSO regression with the regularization parameter selected via five-fold cross-validation on the training set. The L1 penalty induces sparsity in the coefficient vector, enabling automatic feature selection while retaining interpretability. The optimal regularization strength varied across regions, reflecting differences in signal complexity and predictor relevance.
+## LSTM Model Training and Evaluation
 
-# Reults {#sec-results}
+A sequence-based LSTM model was trained using fixed-length historical windows (14 days) to capture temporal dependencies and nonlinear interactions. Data were split chronologically into training, validation, and test sets to prevent leakage. The model uses a two-layer recurrent encoder with dropout, optimized using AdamW with early stopping. The target variable was log-transformed during training to stabilize variance, and all metrics were computed on the original PM2.5 scale.
 
-## LASSO
+Baseline comparators—including persistence and window-mean predictors—were evaluated on the same test split to establish meaningful performance thresholds.
 
-Model performance was evaluated on the held-out test data using metrics computed on the original PM2.5 scale, including mean absolute error (MAE), root mean squared error (RMSE), coefficient of determination (R²), mean absolute percentage error (MAPE), symmetric MAPE (sMAPE), and the Pearson correlation coefficient between predictions and observations.
+# Results {#sec-results}
 
-Across the 26 regions, the LASSO baseline achieved a mean test R² of approximately 0.25 and a median R² of 0.22, indicating that the linear model explains a modest fraction of the variability in future PM2.5 concentrations. Average test RMSE and MAE were approximately 2.9 µg/m³ and 2.2 µg/m³, respectively, while the mean Pearson correlation between predicted and observed values was approximately 0.55, suggesting moderate agreement in temporal variation.
+## LASSO Results
 
-Predictive performance varied substantially across regions. Some regions exhibited relatively strong linear relationships, with test R² values exceeding 0.45, whereas others showed limited predictive skill, with R² values below 0.10. This variability highlights pronounced regional differences in PM2.5 dynamics, likely driven by differences in local emission sources, meteorological conditions, and spatial coverage of monitoring stations.
+Across 26 regions, the LASSO baseline achieved a mean test R² of approximately 0.25 and a median R² of 0.22, indicating modest explanatory power. Average RMSE and MAE were approximately 2.9 µg/m³ and 2.2 µg/m³, respectively, with a mean Pearson correlation of 0.55. Performance varied substantially across regions, reflecting heterogeneous pollution dynamics.
 
-The LASSO models produced sparse solutions, selecting on average several dozen predictors per region, with the exact number depending on the chosen regularization strength. Predictors related to wind dynamics, precipitation, seasonal patterns, and regional PM2.5 aggregates were among the most consistently selected across regions. While the sparsity of the models supports interpretability and facilitates physical interpretation, the overall performance indicates that important nonlinear relationships and temporal dependencies are not fully captured by a linear framework.
+The model produced sparse solutions, typically selecting several dozen predictors per region. Wind-related variables, precipitation, seasonal indicators, and lagged PM2.5 measures were consistently selected, aligning with known physical mechanisms. However, the limited predictive power suggests that linear models are insufficient to capture complex nonlinear and temporal interactions.
 
-In summary, the region-wise LASSO provides a transparent and leakage-safe baseline that captures key linear and seasonal components of PM2.5 variation. Its limited explanatory power relative to more flexible models motivates the use of nonlinear and sequence-based approaches, such as the LSTM, for improved predictive performance.
+## LSTM Results
 
+The LSTM substantially outperformed all baselines, achieving MAE 1.96, RMSE 2.71, R² 0.356, and Pearson r 0.598 on the test set. This represents a 12–19% reduction in MAE relative to persistence and window-mean baselines. Gains from extending the input window beyond 7 days were modest, indicating that most predictive information lies in recent history.
+
+Permutation importance analysis shows that recent PM2.5 history dominates predictive performance, with meaningful secondary contributions from temperature, precipitation, wind, and seasonal features. Performance improvements are especially pronounced during elevated pollution periods, supporting the model’s relevance for alerting applications.
 
 # Discussion {#sec-diss}
 
-123
+This study demonstrates that next-day PM2.5 concentrations can be predicted with meaningful accuracy using routinely available meteorological and traffic-related data, particularly when temporal dependence and nonlinear structure are explicitly modeled. While a region-wise LASSO baseline captures important linear and seasonal effects, its limited explanatory power underscores the necessity of sequence-based models for short-horizon forecasting.
+
+From a policy perspective, the LSTM’s improvement over persistence is critical. Reactive systems that rely solely on same-day measurements leave little time for institutional response. Even modest next-day forecasting skill enables proactive decisions regarding outdoor activities, ventilation strategies, transportation planning, and communication with families—especially in high-risk regions.
+
+The results also highlight important equity considerations. Regions with consistently higher pollution levels may benefit disproportionately from proactive alerting systems, suggesting that forecasting tools should be integrated into differentiated preparedness strategies rather than uniform province-wide policies.
+
+Several limitations warrant discussion. Forecast uncertainty increases during abrupt wildfire events and long-range smoke transport, where local meteorology alone may be insufficient. Additionally, the absence of explicit wildfire or satellite-based aerosol indicators likely constrains peak-event performance. Future work should integrate remote-sensing products, chemical transport model outputs, or wildfire plume indicators to improve tail-risk prediction.
+
+Methodologically, further gains may be achieved by incorporating explicit region or station identifiers via embeddings, adopting loss functions that emphasize high-pollution days, and reporting stratified performance metrics across pollution regimes. Despite these limitations, the proposed framework demonstrates that policy-ready, leakage-safe next-day PM2.5 forecasting is feasible and can meaningfully support proactive decision-making in education systems.
+
+
 
