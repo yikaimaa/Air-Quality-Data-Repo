@@ -2,7 +2,7 @@
 title: "Air Quality Analysis"
 subtitle: "Findings Reveal Vaccination and Healthcare Spending as Key Drivers of Mortality Reduction"
 author:
-  - name: Junbo Li
+  - name: Junbo Li, Yikai Ma, Yuhan Fu, Ruolong Zhang, 
 abstract: "123"
 format: pdf
 date: today
@@ -49,7 +49,27 @@ Across both datasets, preprocessing steps included timestamp standardization, re
 
 # Model {#sec-model}
 
+## LASSO Baseline Model {#sec-lasso-model}
+
+We implemented a time-aware, region-wise LASSO regression as a linear baseline for PM2.5 prediction. The response variable was daily PM2.5 concentration (pm25_label). To account for spatial heterogeneity and avoid information sharing across geographically distinct areas, separate models were trained for each region.
+
+For each region, observations were ordered chronologically by date. Non-predictive identifiers, geographic coordinates, and the response variable were excluded from the feature set, and only numeric predictors were retained. Rows with missing values in either predictors or the response were removed to ensure a valid design matrix. All predictors were standardized using z-score normalization prior to model fitting. Standardization was performed within a scikit-learn pipeline to ensure that scaling parameters were learned exclusively from the training data, thereby preventing data leakage.
+
+A strict time-based split was applied within each region, with the first 80% of observations used for training and the remaining 20% reserved for testing. Model estimation was performed using LASSO regression with the regularization parameter selected via five-fold cross-validation on the training set. The L1 penalty induces sparsity in the coefficient vector, enabling automatic feature selection while retaining interpretability. The optimal regularization strength varied across regions, reflecting differences in signal complexity and predictor relevance.
+
 # Reults {#sec-results}
+
+## LASSO
+
+Model performance was evaluated on the held-out test data using metrics computed on the original PM2.5 scale, including mean absolute error (MAE), root mean squared error (RMSE), coefficient of determination (R²), mean absolute percentage error (MAPE), symmetric MAPE (sMAPE), and the Pearson correlation coefficient between predictions and observations.
+
+Across the 26 regions, the LASSO baseline achieved a mean test R² of approximately 0.25 and a median R² of 0.22, indicating that the linear model explains a modest fraction of the variability in future PM2.5 concentrations. Average test RMSE and MAE were approximately 2.9 µg/m³ and 2.2 µg/m³, respectively, while the mean Pearson correlation between predicted and observed values was approximately 0.55, suggesting moderate agreement in temporal variation.
+
+Predictive performance varied substantially across regions. Some regions exhibited relatively strong linear relationships, with test R² values exceeding 0.45, whereas others showed limited predictive skill, with R² values below 0.10. This variability highlights pronounced regional differences in PM2.5 dynamics, likely driven by differences in local emission sources, meteorological conditions, and spatial coverage of monitoring stations.
+
+The LASSO models produced sparse solutions, selecting on average several dozen predictors per region, with the exact number depending on the chosen regularization strength. Predictors related to wind dynamics, precipitation, seasonal patterns, and regional PM2.5 aggregates were among the most consistently selected across regions. While the sparsity of the models supports interpretability and facilitates physical interpretation, the overall performance indicates that important nonlinear relationships and temporal dependencies are not fully captured by a linear framework.
+
+In summary, the region-wise LASSO provides a transparent and leakage-safe baseline that captures key linear and seasonal components of PM2.5 variation. Its limited explanatory power relative to more flexible models motivates the use of nonlinear and sequence-based approaches, such as the LSTM, for improved predictive performance.
 
 
 # Discussion {#sec-diss}
