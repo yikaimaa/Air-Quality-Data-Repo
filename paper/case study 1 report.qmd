@@ -2,7 +2,7 @@
 title: "Air Quality Analysis"
 subtitle: "Supporting Proactive Air-Quality Decisions in Ontario Schools"
 author:
-  - name: Junbo Li, Yikai Ma, Yuhan Fu, Ruolong Zhang, 
+  - name: Junbo Li, Yikai Ma, Yuhan Fu, Rilong Zhang, Yiming Shen
 abstract: "Climate-driven increases in wildfire activity have led to more frequent short-term spikes in fine particulate matter (PM2.5), posing growing risks to children’s health and challenging the ability of education systems to respond proactively. This study evaluates whether next-day (24-hour mean) PM2.5 concentrations in Ontario can be predicted using routinely available meteorological and traffic-related data. We construct a leakage-safe, region-level dataset combining PM2.5 measurements with cleaned and spatially aligned weather observations. A transparent region-wise LASSO baseline is compared with a nonlinear Long Short-Term Memory (LSTM) model under a strict time-aware evaluation framework. While the LASSO captures linear and seasonal effects (mean test R² ≈ 0.25), the LSTM substantially improves predictive performance (R² = 0.36), outperforming persistence baselines. Results demonstrate the feasibility of policy-ready next-day PM2.5 forecasting to support proactive air-quality decision-making in schools."
 format: pdf
 date: today
