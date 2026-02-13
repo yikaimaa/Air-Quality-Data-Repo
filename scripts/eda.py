@@ -37,7 +37,6 @@ def main():
     n_rows = len(df)
     n_cols = len(df.columns)
     dup_total = df.duplicated().sum()
-    dup_key = df.duplicated(subset=["region", "date"]).sum()
     overall_missing = df.isna().mean().mean()
 
     # ==========================================================
@@ -116,7 +115,7 @@ def main():
     save_plot(fig, fig_dir / "acf.png")
 
     # ==========================================================
-    # CORRELATION ANALYSIS
+    # SIMPLIFIED CORRELATION ANALYSIS
     # Corr(X_t , PM_{t+1})
     # ==========================================================
 
@@ -127,28 +126,34 @@ def main():
 
     df_corr = df.dropna(subset=["pm25_next_day"]).copy()
 
-    numeric_cols = df_corr.select_dtypes(include="number").columns.tolist()
-    numeric_cols.remove("pm25_next_day")
+    numeric_df = df_corr.select_dtypes(include="number")
 
-    corr_matrix = df_corr[numeric_cols + ["pm25_next_day"]].corr()
+    # Remove all-zero columns
+    zero_cols = numeric_df.columns[(numeric_df == 0).all()].tolist()
+    if zero_cols:
+        print("Removing all-zero columns from correlation:")
+        print(zero_cols)
+
+    numeric_df = numeric_df.drop(columns=zero_cols)
+
+    if "pm25_next_day" not in numeric_df.columns:
+        numeric_df["pm25_next_day"] = df_corr["pm25_next_day"]
+
+    corr_matrix = numeric_df.corr()
     target_corr = corr_matrix["pm25_next_day"].sort_values(ascending=False)
     target_corr = target_corr.drop("pm25_next_day")
 
     corr_table = target_corr.to_frame("corr_with_next_day_pm25")
 
-    fig = plt.figure(figsize=(6, 8))
-    sns.heatmap(
-        corr_table,
-        cmap="coolwarm",
-        center=0,
-        annot=True,
-        fmt=".2f"
-    )
+    # Better visualization: bar plot
+    fig = plt.figure(figsize=(8, 6))
+    target_corr.sort_values().plot(kind="barh")
     plt.title("Correlation with Next-Day PM25")
+    plt.xlabel("Correlation")
     save_plot(fig, fig_dir / "correlation_next_day_pm25.png")
 
     # ==========================================================
-    # WORKFLOW PRINT
+    # WORKFLOW PRINT (concise)
     # ==========================================================
     print("\n===== EDA SUMMARY =====")
     print("Rows:", n_rows)
@@ -169,7 +174,6 @@ def main():
     <h2>Basic Info</h2>
     <p>Rows: {n_rows}</p>
     <p>Columns: {n_cols}</p>
-    <p>Total duplicates: {dup_total}</p>
 
     <h2>Missing Analysis</h2>
     {missing_rate.to_frame("missing_rate").to_html()}
