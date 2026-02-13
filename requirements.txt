@@ -4,3 +4,5 @@ scikit-learn
 pytest
 requests
 matplotlib
+joblib
+torch
