@@ -54,7 +54,7 @@ The PM2.5 and weather datasets were merged by region and date. All region-day PM
 
 The integrated dataset contains 51,830 region-day observations with strong coverage; PM2.5 exhibits only 0.4% missingness. The distribution of daily PM2.5 is highly right-skewed, with occasional extreme values exceeding 400 µg/m³, indicating that air-quality risk is driven by rare but severe events. Regional heterogeneity is pronounced, with southern and industrialized regions exhibiting higher average concentrations.
 
-Temporal diagnostics reveal strong short-term persistence, with lag-1 autocorrelation around 0.72, and a moderate correlation between current and next-day PM2.5 (r ≈ 0.57). Meteorological variables show meaningful associations: wind speed and precipitation are negatively correlated with PM2.5, while temperature is positively correlated. An Augmented Dickey–Fuller test rejects the unit-root hypothesis (p < 0.001), suggesting no long-term explosive trend.
+Temporal diagnostics reveal strong short-term persistence, with lag-1 autocorrelation around 0.72, and a moderate correlation between current and next-day PM2.5 (r $\approx$ 0.57). Meteorological variables show meaningful associations: wind speed and precipitation are negatively correlated with PM2.5, while temperature is positively correlated. An Augmented Dickey–Fuller test rejects the unit-root hypothesis (p < 0.001), suggesting no long-term explosive trend.
 
 These patterns motivate models that incorporate temporal dependence, seasonality, and meteorological drivers while remaining robust to heavy-tailed outcomes.
 
