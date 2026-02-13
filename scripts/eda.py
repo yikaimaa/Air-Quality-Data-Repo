@@ -95,9 +95,6 @@ def main():
     between_var = region_mean.var()
     within_var = df.groupby("region")[pm_col].var().mean()
 
-    threshold = 35
-    extreme_prob = (pm > threshold).mean()
-
     # ==========================================================
     # AUTOCORRELATION
     # ==========================================================
@@ -119,15 +116,36 @@ def main():
     save_plot(fig, fig_dir / "acf.png")
 
     # ==========================================================
-    # CORRELATION HEATMAP
+    # CORRELATION ANALYSIS
+    # Corr(X_t , PM_{t+1})
     # ==========================================================
-    numeric_df = df.select_dtypes(include="number")
-    corr = numeric_df.corr()
 
-    fig = plt.figure(figsize=(10, 8))
-    sns.heatmap(corr, cmap="coolwarm", center=0)
-    plt.title("Correlation Heatmap")
-    save_plot(fig, fig_dir / "correlation_heatmap.png")
+    df["pm25_next_day"] = (
+        df.groupby("region")[pm_col]
+        .shift(-1)
+    )
+
+    df_corr = df.dropna(subset=["pm25_next_day"]).copy()
+
+    numeric_cols = df_corr.select_dtypes(include="number").columns.tolist()
+    numeric_cols.remove("pm25_next_day")
+
+    corr_matrix = df_corr[numeric_cols + ["pm25_next_day"]].corr()
+    target_corr = corr_matrix["pm25_next_day"].sort_values(ascending=False)
+    target_corr = target_corr.drop("pm25_next_day")
+
+    corr_table = target_corr.to_frame("corr_with_next_day_pm25")
+
+    fig = plt.figure(figsize=(6, 8))
+    sns.heatmap(
+        corr_table,
+        cmap="coolwarm",
+        center=0,
+        annot=True,
+        fmt=".2f"
+    )
+    plt.title("Correlation with Next-Day PM25")
+    save_plot(fig, fig_dir / "correlation_next_day_pm25.png")
 
     # ==========================================================
     # WORKFLOW PRINT
@@ -137,11 +155,11 @@ def main():
     print("Duplicates:", dup_total)
     print("Overall missing rate:", round(overall_missing, 4))
     print("ADF p-value:", round(adf_p, 6))
-    print("Lag1 correlation:", round(lag_corr[0], 4))
+    print("Top correlation:", round(target_corr.iloc[0], 4))
     print("=======================\n")
 
     # ==========================================================
-    # HTML
+    # HTML REPORT
     # ==========================================================
     html = f"""
     <html>
@@ -153,18 +171,11 @@ def main():
     <p>Columns: {n_cols}</p>
     <p>Total duplicates: {dup_total}</p>
 
-    <h2>Missing Rate by Column</h2>
+    <h2>Missing Analysis</h2>
     {missing_rate.to_frame("missing_rate").to_html()}
-
-    <h2>Row-wise Missing Distribution</h2>
     {row_missing_dist.to_frame("count").to_html()}
-
-    <h2>Missing by Region</h2>
     {missing_region.to_frame("missing_rate").to_html()}
     <img src="figures/missing_rate_region.png">
-
-    <h2>Missing over Time</h2>
-    {missing_date.head(30).to_frame("missing_rate (first 30 days)").to_html()}
     <img src="figures/missing_rate_time.png">
 
     <h2>PM25 Distribution</h2>
@@ -175,7 +186,7 @@ def main():
     <img src="figures/pm25_distribution.png">
 
     <h2>Ontario Trend</h2>
-    {ontario_avg.tail(30).to_frame("pm25_avg_last_30_days").to_html()}
+    {ontario_avg.tail(30).to_frame("pm25_last_30_days").to_html()}
     <img src="figures/pm25_trend.png">
 
     <h2>PM25 by Region</h2>
@@ -186,19 +197,14 @@ def main():
     <p>ADF Statistic: {adf_stat}</p>
     <p>p-value: {adf_p}</p>
 
-    <h2>Variance Decomposition</h2>
-    <p>Overall: {overall_var}</p>
-    <p>Between: {between_var}</p>
-    <p>Within: {within_var}</p>
-
     <h2>Autocorrelation</h2>
     {lag_corr_df.to_html(index=False)}
     {acf_df.to_html(index=False)}
     <img src="figures/acf.png">
 
-    <h2>Correlation Matrix</h2>
-    {corr.to_html()}
-    <img src="figures/correlation_heatmap.png">
+    <h2>Correlation with Next-Day PM25</h2>
+    {corr_table.to_html()}
+    <img src="figures/correlation_next_day_pm25.png">
 
     </body>
     </html>
