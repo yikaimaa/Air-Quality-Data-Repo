@@ -101,11 +101,20 @@ jobs:
       # EDA
       # ============================================================
 
-      - name: Run EDA quality report
+      - name: Run Overall EDA
         run: |
-          uv run --no-project python scripts/eda_quality_report.py \
-            --in "outputs/pm25_weather_daily_region_joined.csv" \
-            --out "outputs/eda_report.html"
+          mkdir -p outputs/eda
+          uv run --no-project python scripts/eda.py \
+            --in outputs/pm25_weather_daily_region_joined.csv \
+            --out-html outputs/eda/eda_summary.html \
+            --out-dir outputs/eda
+
+      - name: Upload EDA artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: eda_outputs
+          path: outputs/eda/
+          if-no-files-found: error
 
       # ============================================================
       # Filling the time series from 2020-01-01 to 2024-12-31
