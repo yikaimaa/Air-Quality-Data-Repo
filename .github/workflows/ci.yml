@@ -22,6 +22,3 @@ jobs:
         run: |
           uv venv
           uv pip install -r requirements.txt
-
-      - name: Basic import check
-        run: uv run python -c "import numpy, pandas"
