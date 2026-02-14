@@ -18,8 +18,3 @@ The repo is structured as follows:
 
 ## Model
 
-...
-
-## Statement on LLM usage
-
-The R code in the `scripts` and `paper` folders was written with the help of Chat-GPT4. It is used to generate code and debugging. Also, Chat-GPT4 is used to write the paper, including conducting data analysis, generating references, and improving grammar and logical errors. The complete chat history is in `other/llm_usage/usage.txt`.
