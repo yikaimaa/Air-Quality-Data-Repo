@@ -243,3 +243,37 @@ jobs:
             outputs/lstm_summary.json
             outputs/*.pt
           if-no-files-found: error
+
+      # ============================================================
+      # RENDER QUARTO REPORT (QMD -> PDF, save to paper/)
+      # ============================================================
+
+      - name: Install Quarto
+        uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: "latest"
+
+      - name: Install LaTeX (for PDF rendering)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            texlive-xetex \
+            texlive-fonts-recommended \
+            texlive-plain-generic \
+            texlive-latex-recommended \
+            texlive-latex-extra \
+            latexmk
+
+      - name: Render Quarto PDF (save to paper/)
+        env:
+          QUARTO_PYTHON: .venv/bin/python
+        run: |
+          quarto render "paper/case study 1 report.qmd" --to pdf
+
+      - name: Upload Quarto PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: case_study_report_pdf
+          path: paper/*.pdf
+          if-no-files-found: error
+
