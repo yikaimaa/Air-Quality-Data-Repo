@@ -40,6 +40,27 @@ jobs:
             --out "outputs/pm25_hourly_wide_final.csv" \
             --out-station-lookup "outputs/station_lookup.csv"
 
+      # ============================================================
+      # WILDFIRE PIPELINE START
+      # ============================================================
+
+      - name: Download and clean wildfire data
+        run: |
+          uv run --no-project python scripts/download_clean_wildfire.py \
+            --gdrive-link "https://drive.google.com/file/d/1wf9_Rgeu4xZ1xqTdWuhq1j6QD4jXB5dm/view?usp=sharing" \
+            --out-clean "outputs/wildfire_clean.csv"
+
+      - name: Upload wildfire clean artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wildfire_clean
+          path: outputs/wildfire_clean.csv
+          if-no-files-found: error
+
+      # ============================================================
+      # WILDFIRE PIPELINE END
+      # ============================================================
+
       - name: Build daily PM2.5 (region)
         run: |
           uv run --no-project python scripts/build_daily_pm25_region.py \
