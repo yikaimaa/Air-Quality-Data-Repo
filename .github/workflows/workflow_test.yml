@@ -44,17 +44,17 @@ jobs:
       # WILDFIRE BLOCK START
       # ============================================================
 
-      - name: Load cleaned wildfire data
+      - name: Stage wildfire CSV into outputs
         run: |
-          uv run --no-project python scripts/download_clean_wildfire.py \
-            --in-clean "Datasets/wildfire/wildfire_clean_2020_2024.csv.gz" \
-            --out-clean "outputs/wildfire_clean_2020_2024.csv.gz"
+          mkdir -p outputs
+          gunzip -c "Datasets/wildfire/wildfire_clean_2020_2024.csv.gz" \
+            > "outputs/wildfire_clean_2020_2024.csv"
 
       - name: Upload wildfire clean artifact
         uses: actions/upload-artifact@v4
         with:
           name: wildfire_clean
-          path: outputs/wildfire_clean_2020_2024.csv.gz
+          path: outputs/wildfire_clean_2020_2024.csv
           if-no-files-found: error
 
       # ============================================================
