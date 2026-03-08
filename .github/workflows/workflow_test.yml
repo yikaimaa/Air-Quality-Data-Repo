@@ -61,15 +61,23 @@ jobs:
       # WILDFIRE BLOCK END
       # ============================================================
 
-      - name: Build daily PM2.5 (region)
+      - name: Build daily PM2.5 + wildfire (region)
         run: |
           uv run --no-project python scripts/build_daily_pm25_region.py \
             --in "outputs/pm25_hourly_wide_final.csv" \
             --out "outputs/pm25_daily_region.csv" \
             --station-region-lookup "Datasets/Ontario/intermediate_tables/pm25_station_region_lookup.csv" \
+            --wildfire "Datasets/wildfire/wildfire_clean_2020_2024.csv.gz" \
             --require-region \
             --min-hours 0
 
+      - name: Upload PM2.5 daily region artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pm25_daily_region
+          path: outputs/pm25_daily_region.csv
+          if-no-files-found: error
+          
       # ============================================================
       # WEATHER PIPELINE
       # ============================================================
