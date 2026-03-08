@@ -32,10 +32,13 @@ Definition:
     frp_sum_100km_avg     = mean(frp_sum_100km across stations)
     min_fire_distance_km  = min(min_fire_distance_km across stations)
 
+- Finally:
+    add min_fire_distance_missing flag
+    fill NA min_fire_distance_km with 4000.0
+
 Region mapping:
 - Requires a 'region' column. If missing / partially missing, it can be filled via a
-  Station ID -> region lookup CSV (default: Datasets/Ontario/pm25_station_region_lookup.csv)
-  Expected columns: Station ID, region
+  Station ID -> region lookup CSV
 """
 
 from __future__ import annotations
@@ -397,6 +400,15 @@ def main() -> None:
         )
 
     df_region_day = build_region_day(df_station_day, date_col=date_col)
+
+    if "min_fire_distance_km" in df_region_day.columns:
+        n_missing_dist = int(df_region_day["min_fire_distance_km"].isna().sum())
+        df_region_day["min_fire_distance_missing"] = df_region_day["min_fire_distance_km"].isna().astype(int)
+        df_region_day["min_fire_distance_km"] = df_region_day["min_fire_distance_km"].fillna(4000.0)
+        log(
+            f"[INFO] min_fire_distance_km missing before fill: {n_missing_dist:,}; "
+            "filled with 4000.0 and added min_fire_distance_missing flag."
+        )
 
     n_total_r = len(df_region_day)
     n_nan_r = int(df_region_day["pm25_region_daily_avg"].isna().sum())
