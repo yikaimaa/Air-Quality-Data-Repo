@@ -20,7 +20,7 @@ Filters:
     - drop rows missing latitude / longitude / frp
 
 Example:
-    python download_clean_wildfire.py \
+    python scripts/download_clean_wildfire.py \
       --gdrive-link "https://drive.google.com/file/d/1wf9_Rgeu4xZ1xqTdWuhq1j6QD4jXB5dm/view?usp=sharing" \
       --out-clean "outputs/wildfire_clean.csv"
 """
@@ -28,10 +28,11 @@ Example:
 from __future__ import annotations
 
 import argparse
-import os
+import html
 import re
 import tempfile
 from pathlib import Path
+from urllib.parse import urljoin
 
 import pandas as pd
 import requests
@@ -60,14 +61,16 @@ def parse_args() -> argparse.Namespace:
 
 def extract_gdrive_file_id(link: str) -> str:
     """
-    Extract Google Drive file ID from a standard share link.
+    Extract Google Drive file ID from common share-link formats.
 
-    Example:
-    https://drive.google.com/file/d/<FILE_ID>/view?usp=sharing
+    Supported examples:
+      https://drive.google.com/file/d/<FILE_ID>/view?usp=sharing
+      https://drive.google.com/open?id=<FILE_ID>
+      https://drive.google.com/uc?id=<FILE_ID>&export=download
     """
     patterns = [
         r"/file/d/([a-zA-Z0-9_-]+)",
-        r"id=([a-zA-Z0-9_-]+)",
+        r"[?&]id=([a-zA-Z0-9_-]+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, link)
@@ -80,19 +83,97 @@ def build_direct_download_url(file_id: str) -> str:
     return f"https://drive.google.com/uc?export=download&id={file_id}"
 
 
+def _save_response_stream(resp: requests.Response, out_path: Path) -> None:
+    with open(out_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=1024 * 1024):
+            if chunk:
+                f.write(chunk)
+
+
 def download_file(url: str, out_path: Path) -> None:
     """
-    Download file from URL to out_path.
+    Download a file from Google Drive, including the large-file confirm page flow.
     """
-    with requests.get(url, stream=True, timeout=120) as r:
-        r.raise_for_status()
-        with open(out_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    f.write(chunk)
+    session = requests.Session()
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    # First request
+    r = session.get(url, stream=True, timeout=120, headers=headers)
+    r.raise_for_status()
+
+    content_type = r.headers.get("Content-Type", "").lower()
+
+    # Case 1: already got the real file
+    if "text/html" not in content_type:
+        _save_response_stream(r, out_path)
+        return
+
+    # Case 2: got an HTML warning / confirm page
+    html_text = r.text
+
+    # Try several patterns used by Google Drive pages
+    patterns = [
+        r'href="(/uc\?export=download[^"]+)"',
+        r'href="(https://drive\.google\.com/uc\?export=download[^"]+)"',
+        r'action="(https://drive\.google\.com/uc\?export=download[^"]+)"',
+        r'confirm=([0-9A-Za-z_]+).*?id=([0-9A-Za-z_-]+)',
+    ]
+
+    confirm_url = None
+
+    for i, pattern in enumerate(patterns):
+        match = re.search(pattern, html_text, flags=re.DOTALL)
+        if not match:
+            continue
+
+        # Pattern with explicit confirm token and file id
+        if i == 3:
+            confirm_token = match.group(1)
+            file_id = match.group(2)
+            confirm_url = (
+                f"https://drive.google.com/uc?export=download"
+                f"&confirm={confirm_token}&id={file_id}"
+            )
+        else:
+            confirm_url = html.unescape(match.group(1))
+            if confirm_url.startswith("/"):
+                confirm_url = urljoin("https://drive.google.com", confirm_url)
+        break
+
+    if not confirm_url:
+        raise ValueError(
+            "Could not find Google Drive confirm download link in the warning page."
+        )
+
+    log("[INFO] Google Drive returned a warning page; following confirm download link...")
+
+    # Second request: try to fetch actual file
+    r2 = session.get(confirm_url, stream=True, timeout=120, headers=headers)
+    r2.raise_for_status()
+
+    content_type2 = r2.headers.get("Content-Type", "").lower()
+    if "text/html" in content_type2:
+        # Still HTML means confirm step failed
+        preview = r2.text[:500].replace("\n", " ")
+        raise ValueError(
+            "Google Drive still returned HTML instead of the CSV file after confirm step. "
+            f"Page preview: {preview}"
+        )
+
+    _save_response_stream(r2, out_path)
 
 
 def load_and_clean_wildfire(csv_path: Path) -> pd.DataFrame:
+    # Guard against accidentally downloading HTML instead of CSV
+    with open(csv_path, "r", encoding="utf-8", errors="ignore") as f:
+        head = f.read(1000)
+
+    head_lower = head.lower()
+    if "<html" in head_lower or "<!doctype html" in head_lower:
+        raise ValueError(
+            "Downloaded file is HTML, not CSV. Google Drive confirmation step likely failed."
+        )
+
     df = pd.read_csv(csv_path)
 
     required_cols = ["latitude", "longitude", "acq_date", "frp", "confidence", "type"]
@@ -106,7 +187,7 @@ def load_and_clean_wildfire(csv_path: Path) -> pd.DataFrame:
     # Keep only required columns
     df = df[required_cols].copy()
 
-    # Parse numeric columns
+    # Convert numeric columns
     df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
     df["frp"] = pd.to_numeric(df["frp"], errors="coerce")
@@ -116,16 +197,19 @@ def load_and_clean_wildfire(csv_path: Path) -> pd.DataFrame:
     df["confidence"] = df["confidence"].astype("string").str.strip().str.lower()
 
     # Parse date
-    df["acq_date"] = pd.to_datetime(df["acq_date"], errors="coerce").dt.date
+    df["acq_date"] = pd.to_datetime(df["acq_date"], errors="coerce")
 
     # Apply filters
     df = df[df["type"] == 0]
     df = df[df["confidence"].isin({"nominal", "high"})]
     df = df[
-        (pd.to_datetime(df["acq_date"], errors="coerce") >= pd.Timestamp("2020-01-01"))
-        & (pd.to_datetime(df["acq_date"], errors="coerce") <= pd.Timestamp("2024-12-31"))
+        (df["acq_date"] >= pd.Timestamp("2020-01-01")) &
+        (df["acq_date"] <= pd.Timestamp("2024-12-31"))
     ]
     df = df.dropna(subset=["latitude", "longitude", "frp", "acq_date"])
+
+    # Store date as YYYY-MM-DD string for cleaner downstream CSV behavior
+    df["acq_date"] = df["acq_date"].dt.strftime("%Y-%m-%d")
 
     # Reset index
     df = df.reset_index(drop=True)
