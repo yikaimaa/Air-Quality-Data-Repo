@@ -13,14 +13,12 @@ Expected columns:
     longitude
     acq_date
     frp
-    confidence
-    type
 
-This script does NOT download from Google Drive and does NOT redo the
-full cleaning pipeline. It simply:
+This script does NOT download from Google Drive and does NOT redo cleaning.
+It simply:
     1. reads the cleaned local wildfire file
     2. validates required columns
-    3. optionally standardizes acq_date format
+    3. standardizes numeric/date columns
     4. writes the result to the requested output path
 
 Example:
@@ -65,7 +63,7 @@ def load_clean_wildfire(path: Path) -> pd.DataFrame:
 
     df = pd.read_csv(path)
 
-    required_cols = ["latitude", "longitude", "acq_date", "frp", "confidence", "type"]
+    required_cols = ["latitude", "longitude", "acq_date", "frp"]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
         raise ValueError(
@@ -79,11 +77,9 @@ def load_clean_wildfire(path: Path) -> pd.DataFrame:
     df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
     df["frp"] = pd.to_numeric(df["frp"], errors="coerce")
-    df["type"] = pd.to_numeric(df["type"], errors="coerce")
-    df["confidence"] = df["confidence"].astype("string").str.strip().str.lower()
     df["acq_date"] = pd.to_datetime(df["acq_date"], errors="coerce")
 
-    # Drop rows with critical missing values, just as a safety check
+    # Drop rows with critical missing values
     df = df.dropna(subset=["latitude", "longitude", "frp", "acq_date"])
 
     # Standardize date format
