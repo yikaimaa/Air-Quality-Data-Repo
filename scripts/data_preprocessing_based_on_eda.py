@@ -24,6 +24,18 @@ def main():
     print(f"Initial shape: {df.shape}")
 
     # --------------------------------------------------
+    # Protected columns: do NOT drop these even if all-zero
+    # or near-constant, because they carry wildfire meaning
+    # --------------------------------------------------
+    protected_cols = {
+        "fire_count_50km_avg",
+        "fire_count_100km_avg",
+        "frp_sum_100km_avg",
+        "min_fire_distance_km",
+        "min_fire_distance_missing",
+    }
+
+    # --------------------------------------------------
     # 1️⃣ Drop severely incomplete region
     # --------------------------------------------------
     if "region" in df.columns:
@@ -44,10 +56,11 @@ def main():
 
     # --------------------------------------------------
     # 3️⃣ Drop flag / quality / outlier columns
+    #     But protect wildfire missing indicator
     # --------------------------------------------------
     flag_cols = [
         c for c in df.columns
-        if "_is_" in c or "data_quality" in c
+        if ("_is_" in c or "data_quality" in c) and c not in protected_cols
     ]
 
     for col in flag_cols:
@@ -57,9 +70,13 @@ def main():
 
     # --------------------------------------------------
     # 4️⃣ Drop all-zero numeric columns
+    #     But do NOT drop protected wildfire columns
     # --------------------------------------------------
     numeric_df = df.select_dtypes(include="number")
-    zero_cols = numeric_df.columns[(numeric_df == 0).all()].tolist()
+    zero_cols = [
+        c for c in numeric_df.columns
+        if (numeric_df[c] == 0).all() and c not in protected_cols
+    ]
 
     for col in zero_cols:
         print(f"[DROP] {col} -> all-zero column")
@@ -68,10 +85,14 @@ def main():
 
     # --------------------------------------------------
     # 5️⃣ Drop near-constant columns
+    #     But do NOT drop protected wildfire columns
     # --------------------------------------------------
     numeric_df = df.select_dtypes(include="number")
-    var_series = numeric_df.var()
-    near_constant_cols = var_series[var_series < 1e-8].index.tolist()
+    var_series = numeric_df.var(numeric_only=True)
+    near_constant_cols = [
+        c for c in var_series[var_series < 1e-8].index.tolist()
+        if c not in protected_cols
+    ]
 
     for col in near_constant_cols:
         print(f"[DROP] {col} -> near-constant variance")
@@ -79,8 +100,13 @@ def main():
     df = df.drop(columns=near_constant_cols, errors="ignore")
 
     # --------------------------------------------------
-    # 6️⃣ Missing Value Handling (More Lenient but Safe)
+    # 6️⃣ Missing Value Handling
     # --------------------------------------------------
+    if "date" not in df.columns:
+        raise ValueError("Input must contain 'date' column")
+
+    if "region" not in df.columns:
+        raise ValueError("Input must contain 'region' column")
 
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values(["region", "date"])
@@ -138,6 +164,23 @@ def main():
         if col in df.columns:
             df[col] = df.groupby("region")[col].ffill(limit=2)
             print(f"[IMPUTE] {col} -> ffill(limit=2) (wind direction circular safe)")
+
+    # --------------------------------------------------
+    # 7️⃣ Wildfire columns: keep as-is
+    #     Do NOT re-impute them here
+    # --------------------------------------------------
+    wildfire_cols = [
+        "fire_count_50km_avg",
+        "fire_count_100km_avg",
+        "frp_sum_100km_avg",
+        "min_fire_distance_km",
+        "min_fire_distance_missing",
+    ]
+    existing_wildfire_cols = [c for c in wildfire_cols if c in df.columns]
+    if existing_wildfire_cols:
+        print("[INFO] Wildfire columns kept without additional imputation:")
+        for col in existing_wildfire_cols:
+            print(f"       - {col}")
 
     print("[INFO] pm25_region_daily_avg -> no imputation applied")
 
