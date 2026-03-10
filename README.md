@@ -1,5 +1,5 @@
 # Air-Quality-Data-Repo
-Air Quality Datasets shared by the professor
+Ontario Air Quality Project using data about **PM2.5 pollution**, **weather**, and **wildfire**
 
 ## Overview
 
