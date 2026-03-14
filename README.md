@@ -29,6 +29,7 @@ Air-Quality-Data-Repo/
 ├── pm25_trend.png
 ├── pyproject.toml
 └── requirements.txt
+```
 
 ## Features
 
