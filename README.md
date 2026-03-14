@@ -96,6 +96,7 @@ pip install -r requirements.txt
 
 # 3. run project scripts
 python scripts/<your_script_name>.py
+```
 
 If your workflow uses notebooks or R/Quarto content for reporting, you can also open the project with the included `.Rproj` file.
 
