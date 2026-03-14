@@ -63,6 +63,7 @@ cd Air-Quality-Data-Repo
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
 
 On Windows PowerShell:
 
@@ -70,6 +71,7 @@ On Windows PowerShell:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+```
 
 ## Getting Started
 
