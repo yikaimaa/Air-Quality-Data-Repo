@@ -2,7 +2,7 @@ name: workflow_test
 
 on:
   push:
-    branches: [cs2-report]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -77,7 +77,7 @@ jobs:
           name: pm25_daily_region
           path: outputs/pm25_daily_region.csv
           if-no-files-found: error
-          
+
       # ============================================================
       # WEATHER PIPELINE
       # ============================================================
@@ -143,11 +143,16 @@ jobs:
           name: eda_outputs
           path: outputs/eda/
           if-no-files-found: error
-          
+
+      - name: Debug EDA outputs
+        run: |
+          echo "Listing outputs/eda"
+          ls -R outputs/eda || true
+
       # ============================================================
-      # Filling the time series from 2020-01-01 to 2024-12-31
+      # FILL MISSING TIME SERIES
       # ============================================================
-      
+
       - name: Fill missing time series
         run: |
           uv run --no-project python scripts/fill_missing_time_series.py \
@@ -177,7 +182,7 @@ jobs:
           name: clean_dataset
           path: outputs/clean_dataset.csv
           if-no-files-found: error
-          
+
       # ============================================================
       # SHIFT1 (Prevent Data Leakage)
       # ============================================================
@@ -320,8 +325,10 @@ jobs:
       - name: Copy EDA figures for Quarto
         run: |
           mkdir -p paper/figures
-          cp outputs/eda/wildfire_pm25_time_trend.png paper/figures/
-          cp outputs/eda/wildfire_extreme_pm25_comparison.png paper/figures/
+          test -f outputs/eda/figures/wildfire_pm25_time_trend.png || { echo "Missing outputs/eda/figures/wildfire_pm25_time_trend.png"; exit 1; }
+          test -f outputs/eda/figures/wildfire_extreme_pm25_comparison.png || { echo "Missing outputs/eda/figures/wildfire_extreme_pm25_comparison.png"; exit 1; }
+          cp outputs/eda/figures/wildfire_pm25_time_trend.png paper/figures/
+          cp outputs/eda/figures/wildfire_extreme_pm25_comparison.png paper/figures/
 
       - name: Check EDA wildfire figures exist
         run: |
@@ -357,6 +364,6 @@ jobs:
       - name: Upload Quarto PDF
         uses: actions/upload-artifact@v4
         with:
-          name: case_study_report_2_pdf
+          name: case_study_2_report_pdf
           path: paper/*.pdf
           if-no-files-found: error
