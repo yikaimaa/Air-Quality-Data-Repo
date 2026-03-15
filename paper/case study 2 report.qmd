@@ -63,7 +63,7 @@ This shift-based design ensures that the forecasting pipeline reflects a **reali
 
 ---
 
-# Wildfire Exposure Features (New in Case Study 2)
+# Wildfire Exposure Features (CS 2)
 
 To capture the impact of wildfire smoke on regional air quality, several wildfire exposure indicators were constructed.
 
@@ -121,7 +121,7 @@ Sequence windows of multiple days were used as input to predict next-day PM2.5.
 
 ---
 
-## BiLSTM Model (New)
+## BiLSTM Model (CS2)
 
 A Bidirectional LSTM (BiLSTM) model was also evaluated.  
 BiLSTM processes time series sequences in both forward and backward directions during training.
@@ -130,7 +130,7 @@ This allows the model to capture richer temporal patterns within each training s
 
 ---
 
-## Transformer Model (New)
+## Transformer Model (CS2)
 
 We also implemented a Transformer-based time-series model.
 
