@@ -1,0 +1,205 @@
+---
+title: "Case Study 2: Next-Day PM2.5 Forecasting with Wildfire Signals for Proactive School Decision-Making in Ontario"
+format: pdf
+toc: true
+number-sections: true
+---
+
+# Context
+
+Air pollution has significant health impacts, particularly for children.  
+Fine particulate matter (PM2.5) is one of the most critical pollutants affecting respiratory health and school safety decisions. Ontario school boards often rely on same-day air quality information, which limits their ability to proactively respond to hazardous air quality events.
+
+This project aims to build a **next-day PM2.5 forecasting system** using historical air quality observations, meteorological conditions, and wildfire exposure indicators. By predicting PM2.5 levels one day ahead, school administrators and public health agencies can make more informed operational decisions such as modifying outdoor activities.
+
+Case Study 2 extends the previous work by **incorporating wildfire-related signals**, which are increasingly important drivers of PM2.5 variability in Canada.
+
+---
+
+# Executive Summary
+
+We developed a machine learning pipeline to forecast **next-day PM2.5 concentrations across Ontario regions**. The system integrates:
+
+- Historical PM2.5 measurements  
+- Weather conditions  
+- Wildfire exposure signals  
+
+The modelling framework compares multiple predictive models, including traditional regression and deep learning approaches. By combining environmental predictors with temporal sequence models, the pipeline captures both meteorological patterns and wildfire-driven pollution spikes.
+
+Results indicate that deep learning models, particularly LSTM-based architectures, can effectively capture temporal dynamics in PM2.5 levels. Incorporating wildfire features further improves the model’s ability to detect extreme pollution episodes.
+
+---
+
+# Data
+
+The dataset integrates three main components:
+
+1. **PM2.5 air quality data**  
+2. **Meteorological data**  
+3. **Wildfire hotspot data**
+
+PM2.5 observations were aggregated from hourly station-level measurements to daily regional averages. Weather data were matched to PM2.5 stations using spatial proximity and aggregated to regional daily summaries.
+
+Wildfire data were obtained from satellite-detected hotspots. These hotspots capture active fire locations and intensity signals.
+
+The integrated dataset therefore represents **daily regional environmental conditions across Ontario**, combining pollution measurements, weather variables, and wildfire exposure indicators.
+
+---
+
+# Feature Engineering and Leakage Control
+
+Several feature engineering steps were applied to improve predictive performance while preventing data leakage.
+
+Key preprocessing steps included:
+
+- Aligning all datasets to a common **daily time index**
+- Aggregating station-level measurements to **regional averages**
+- Filling missing time points to ensure a continuous time series
+- Applying **shift operations** so that only information available before the prediction date is used
+
+Specifically, predictors were shifted by one day to ensure that models predicting next-day PM2.5 do not inadvertently use same-day information.
+
+This shift-based design ensures that the forecasting pipeline reflects a **realistic operational forecasting scenario**.
+
+---
+
+# Wildfire Exposure Features (CS 2)
+
+To capture the impact of wildfire smoke on regional air quality, several wildfire exposure indicators were constructed.
+
+The following wildfire-related features were added:
+
+- **fire_count_50km_avg**  
+  Average number of wildfire hotspots within 50 km of monitoring stations.
+
+- **fire_count_100km_avg**  
+  Average number of hotspots within 100 km, capturing broader regional wildfire exposure.
+
+- **frp_sum_100km_avg**  
+  Total Fire Radiative Power (FRP) within 100 km, representing wildfire intensity.
+
+- **min_fire_distance_km**  
+  Distance from the nearest wildfire hotspot to the monitoring stations.
+
+These features allow the forecasting models to incorporate both **wildfire proximity and fire intensity**, which are key factors influencing PM2.5 levels during wildfire seasons.
+
+---
+
+# Model
+
+We evaluated several predictive models with different levels of complexity:
+
+- Linear regression (baseline)
+- LSTM sequence model
+- BiLSTM model
+- Transformer model
+
+Each model aims to forecast **next-day PM2.5 levels at the regional level** using historical environmental signals.
+
+---
+
+## Linear Regression Baseline
+
+A linear regression model was first implemented as a baseline.  
+This model provides a simple interpretable benchmark and helps quantify the value added by more complex models.
+
+While linear models can capture some relationships between weather variables and PM2.5 levels, they are limited in modelling nonlinear temporal dependencies.
+
+---
+
+## LSTM Sequence Model
+
+Long Short-Term Memory (LSTM) networks were used to model temporal dependencies in environmental signals.
+
+The LSTM architecture processes sequential input data and can learn patterns across multiple previous days. This allows the model to capture:
+
+- delayed meteorological effects  
+- temporal accumulation of pollution  
+- wildfire smoke propagation signals  
+
+Sequence windows of multiple days were used as input to predict next-day PM2.5.
+
+---
+
+## BiLSTM Model (CS2)
+
+A Bidirectional LSTM (BiLSTM) model was also evaluated.  
+BiLSTM processes time series sequences in both forward and backward directions during training.
+
+This allows the model to capture richer temporal patterns within each training sequence and improve representation learning for environmental signals.
+
+---
+
+## Transformer Model (CS2)
+
+We also implemented a Transformer-based time-series model.
+
+Transformers use attention mechanisms to model long-range dependencies across time steps. Compared with recurrent architectures, attention-based models can better identify important time steps in the sequence.
+
+This architecture has shown strong performance in many sequence modelling tasks and provides an alternative approach to modelling environmental time series.
+
+---
+
+# Results
+
+Model performance was evaluated using several metrics:
+
+- Mean Absolute Error (MAE)  
+- Root Mean Squared Error (RMSE)  
+- R²  
+- Pearson correlation  
+
+These metrics assess both prediction accuracy and the model’s ability to capture temporal variation in PM2.5.
+
+Across models, deep learning approaches generally outperform the linear baseline. Among the tested models, the LSTM architecture achieved the strongest forecasting performance in most regions.
+
+---
+
+# Visual Evidence of Temporal and Regional Structure
+
+Exploratory data analysis reveals strong temporal variation in PM2.5 levels, including seasonal patterns and occasional extreme pollution events.
+
+Regional differences also exist, reflecting variations in local meteorology, industrial activity, and wildfire exposure.
+
+---
+
+## Wildfire–PM2.5 Exploratory Patterns
+
+The following figures illustrate the relationship between wildfire activity and PM2.5 levels.
+
+![Wildfire activity and PM2.5 time trend](figures/wildfire_pm25_time_trend.png)
+
+The first figure shows that higher wildfire activity often coincides with increases in PM2.5. This suggests that wildfire exposure is a relevant signal for air pollution forecasting.
+
+![PM2.5 under extreme wildfire conditions](figures/wildfire_extreme_pm25_comparison.png)
+
+The second figure shows that PM2.5 is generally higher under more extreme wildfire conditions. This provides additional support for adding wildfire features to the model.
+
+---
+
+# Regional Heterogeneity
+
+The forecasting system also reveals regional differences in pollution dynamics.  
+Some regions experience stronger wildfire-driven pollution spikes, while others are more influenced by local meteorological conditions.
+
+Understanding these regional variations is important for designing targeted policy responses and improving localized forecasting accuracy.
+
+---
+
+# Operational Value
+
+A reliable next-day PM2.5 forecasting system can support proactive decision-making for schools and public health agencies.
+
+Potential applications include:
+
+- adjusting outdoor school activities during high pollution events
+- issuing early warnings for vulnerable populations
+- supporting environmental monitoring and planning
+
+By integrating wildfire signals and advanced time-series models, the forecasting pipeline provides a scalable framework for operational air quality prediction.
+
+---
+
+# Models
+
+We evaluated all models on a held-out time-based test set to avoid data leakage, while a separate validation set was used for early stopping and hyperparameter selection. The main evaluation metrics were MAE, RMSE, R², and Pearson correlation, so that we could assess both prediction accuracy and the ability to capture temporal variation in PM2.5. MAE and RMSE were used as the primary error metrics, while R² and Pearson correlation were used to evaluate how well each model captured overall variation and temporal trends. Hyperparameters were selected based on validation performance and training stability, with tuning focused on settings such as sequence length, hidden size or model dimension, number of layers, dropout, learning rate, and pooling strategy. We also applied early stopping and learning-rate scheduling to reduce overfitting and improve robustness. Overall, the results showed that all three models learned meaningful signals from the data, with LSTM providing the best overall forecasting accuracy and BiLSTM showing the strongest ability to capture temporal trends.
