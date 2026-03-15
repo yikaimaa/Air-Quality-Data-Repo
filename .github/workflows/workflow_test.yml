@@ -132,10 +132,10 @@ jobs:
 
       - name: Run EDA
         run: |
-         mkdir -p outputs/eda
-         uv run --no-project python scripts/eda.py \
-           --in outputs/pm25_weather_daily_region_joined.csv \
-           --out-html outputs/eda/eda_summary.html
+          mkdir -p outputs/eda
+          uv run --no-project python scripts/eda.py \
+            --in outputs/pm25_weather_daily_region_joined.csv \
+            --out-html outputs/eda/eda_summary.html
 
       - name: Upload EDA artifacts
         uses: actions/upload-artifact@v4
@@ -195,7 +195,6 @@ jobs:
           path: outputs/model_ready_dataset.csv
           if-no-files-found: error
 
-
       # ============================================================
       # BUILD LSTM DATASET (NPZ) FROM MODEL READY
       # ============================================================
@@ -214,7 +213,6 @@ jobs:
           path: outputs/lstm_dataset_seq14.npz
           if-no-files-found: error
 
-      
       # ============================================================
       # FEATURE ENGINEERING (NO LEAKAGE)
       # ============================================================
@@ -232,24 +230,26 @@ jobs:
           path: outputs/final_model_table.csv
           if-no-files-found: error
 
-    # ============================================================
-    # Linear MODEL TRAINING
-    # ============================================================
-      - name: Feature engineering from shift1 output
+      # ============================================================
+      # LINEAR MODEL TRAINING
+      # ============================================================
+
+      - name: Train linear regression model
         run: |
           uv run --no-project python scripts/linear_regression_model.py \
             --input outputs/final_model_table.csv \
-            --output_dir outputs/linear_model_outputs 
-      - name: Upload Linear model outputs
+            --output_dir outputs/linear_model_outputs
+
+      - name: Upload linear model outputs
         uses: actions/upload-artifact@v4
         with:
           name: linear_model_outputs
           path: outputs/linear_model_outputs/*
           if-no-files-found: error
 
-    # ============================================================
-    # LSTM MODEL TRAINING (NEW)
-    # ============================================================
+      # ============================================================
+      # LSTM MODEL TRAINING
+      # ============================================================
 
       - name: Train LSTM model (next-day PM2.5)
         run: |
@@ -274,7 +274,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # BiLSTM MODEL TRAINING (from model_ready_dataset.csv)
+      # BiLSTM MODEL TRAINING
       # ============================================================
 
       - name: Train BiLSTM model (CSV-aligned)
@@ -294,7 +294,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # TRANSFORMER MODEL TRAINING (from model_ready_dataset.csv)
+      # TRANSFORMER MODEL TRAINING
       # ============================================================
 
       - name: Train Transformer model (CSV-aligned)
@@ -312,6 +312,21 @@ jobs:
           name: transformer_training_outputs
           path: outputs/transformer_csv_aligned/
           if-no-files-found: error
+
+      # ============================================================
+      # PREPARE FIGURES FOR QUARTO REPORT
+      # ============================================================
+
+      - name: Copy EDA figures for Quarto
+        run: |
+          mkdir -p paper/figures
+          cp outputs/eda/wildfire_pm25_time_trend.png paper/figures/
+          cp outputs/eda/wildfire_extreme_pm25_comparison.png paper/figures/
+
+      - name: Check EDA wildfire figures exist
+        run: |
+          test -f paper/figures/wildfire_pm25_time_trend.png
+          test -f paper/figures/wildfire_extreme_pm25_comparison.png
 
       # ============================================================
       # RENDER QUARTO REPORT (QMD -> PDF, save to paper/)
@@ -345,4 +360,3 @@ jobs:
           name: case_study_report_pdf
           path: paper/*.pdf
           if-no-files-found: error
-
