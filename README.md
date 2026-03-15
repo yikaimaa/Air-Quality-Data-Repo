@@ -1,6 +1,17 @@
 # Air-Quality-Data-Repo
 
-A repository for air quality analysis and modeling, focused on **PM2.5 pollution**, with supporting data on **weather**, **wildfire activity**, and related environmental factors. This project brings together datasets, preprocessing scripts, model artifacts, and paper materials in one place for reproducible analysis.
+A machine learning research repository for **PM2.5 air pollution forecasting**, combining environmental monitoring data, meteorological signals, and wildfire activity indicators to model short-term air quality dynamics.
+
+The project investigates whether **predictive analytics can improve next-day air-quality forecasting**, supporting proactive environmental risk management and public-health decision making.
+
+The repository contains the full pipeline for:
+
+- environmental data integration
+- data cleaning and quality control
+- time-series feature engineering
+- predictive modeling (statistical and deep learning)
+- model evaluation and diagnostics
+- research reporting and reproducibility
 
 ## Overview
 
@@ -97,12 +108,27 @@ pip install -r requirements.txt
 # 3. run project scripts
 python scripts/<your_script_name>.py
 ```
+for scripts in order of file .github\workflows\workflow_test.yml
 
-If your workflow uses notebooks or R/Quarto content for reporting, you can also open the project with the included `.Rproj` file.
+## Continuous Integration
+
+This repository includes a **GitHub Actions workflow** located in:
+
+```
+.github/workflows/workflow_test.yml
+```
+
+Whenever changes are pushed to the repository, the workflow automatically:
+
+- installs project dependencies
+- runs the project pipeline
+- generates required outputs
+
+The results are uploaded as **GitHub Actions artifacts**, which can be downloaded from the workflow run page.
 
 ## Outputs
 
-This repository may include outputs such as:
+This repository includes outputs such as:
 
 - cleaned datasets
 - exploratory plots
