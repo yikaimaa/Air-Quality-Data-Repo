@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import math
 import random
+from copy import deepcopy
 from pathlib import Path
 
 import joblib
@@ -59,9 +61,11 @@ class TransformerRegressor(nn.Module):
 
         self.pooling = pooling
         self.use_cls_token = use_cls_token
+
         self.input_proj = nn.Linear(input_dim, d_model)
         self.input_norm = nn.LayerNorm(d_model)
         self.input_dropout = nn.Dropout(dropout)
+
         max_len = max(seq_len + (1 if use_cls_token else 0), 32)
         self.pos_encoder = PositionalEncoding(d_model=d_model, max_len=max_len)
 
@@ -133,13 +137,6 @@ def check_numpy_array(name: str, arr: np.ndarray):
         raise ValueError(f"{name} contains inf.")
 
 
-def check_tensor(name: str, t: torch.Tensor):
-    if torch.isnan(t).any():
-        raise ValueError(f"{name} contains NaN.")
-    if torch.isinf(t).any():
-        raise ValueError(f"{name} contains inf.")
-
-
 def sanitize_numpy(name: str, arr: np.ndarray) -> np.ndarray:
     arr = np.asarray(arr, dtype=np.float32)
     bad = int(np.isnan(arr).sum() + np.isinf(arr).sum())
@@ -177,7 +174,7 @@ def compute_baselines(prepared: dict, metadata: dict, x_scaler):
     mean_pm_scaled = X_test[:, :, pm_idx].mean(axis=1)
     mean_pm_raw = inverse_scale_feature(mean_pm_scaled, pm_idx, x_scaler).reshape(-1)
 
-    baselines = {
+    return {
         "persistence": {
             "mae": float(mean_absolute_error(y_test, last_pm_raw)),
             "rmse": float(np.sqrt(mean_squared_error(y_test, last_pm_raw))),
@@ -189,7 +186,6 @@ def compute_baselines(prepared: dict, metadata: dict, x_scaler):
             "r2": float(r2_score(y_test, mean_pm_raw)),
         },
     }
-    return baselines
 
 
 def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, loss_train_space: float | None = None):
@@ -225,11 +221,11 @@ def evaluate(model, loader, device, y_scaler, criterion=None):
 
     with torch.no_grad():
         for xb, yb in loader:
-            xb = sanitize_tensor("Validation input xb", xb.to(device))
-            yb = sanitize_tensor("Validation target yb", yb.to(device)).view(-1)
+            xb = sanitize_tensor("Eval input xb", xb.to(device))
+            yb = sanitize_tensor("Eval target yb", yb.to(device)).view(-1)
 
             pred = model(xb)
-            pred = sanitize_tensor("Validation predictions", pred)
+            pred = sanitize_tensor("Eval predictions", pred)
 
             if criterion is not None:
                 loss = criterion(pred, yb)
@@ -282,8 +278,8 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
     return total_loss / max(total_n, 1)
 
 
-def permutation_importance(model, loader, device, y_scaler, feature_names, criterion=None, random_state: int = 42):
-    base_metrics, _, _ = evaluate(model, loader, device, y_scaler, criterion=criterion)
+def permutation_importance(model, loader, device, y_scaler, feature_names, random_state: int = 42):
+    base_metrics, _, _ = evaluate(model, loader, device, y_scaler, criterion=None)
     base_mae = base_metrics["mae"]
 
     X_test = loader.dataset.X.numpy().copy()
@@ -304,10 +300,14 @@ def permutation_importance(model, loader, device, y_scaler, feature_names, crite
     return pd.DataFrame(rows).sort_values("mae_increase", ascending=False).reset_index(drop=True)
 
 
+def parse_list_arg(s: str, cast_func):
+    return [cast_func(x.strip()) for x in s.split(",") if x.strip() != ""]
+
+
 def parse_args():
-    p = argparse.ArgumentParser(description="Train a Transformer model for PM2.5 forecasting.")
-    p.add_argument("--csv", type=str, default=DEFAULT_CSV_PATH, help="Path to the model-ready CSV.")
-    p.add_argument("--out_dir", type=str, default="outputs/transformer_csv_aligned")
+    p = argparse.ArgumentParser(description="Train/search Transformer model for PM2.5 forecasting.")
+    p.add_argument("--csv", type=str, default=DEFAULT_CSV_PATH)
+    p.add_argument("--out_dir", type=str, default="outputs/transformer_search")
     p.add_argument("--seq_len", type=int, default=14)
 
     p.add_argument("--batch_size", type=int, default=256)
@@ -335,7 +335,202 @@ def parse_args():
     p.add_argument("--scheduler_patience", type=int, default=3)
     p.add_argument("--min_lr", type=float, default=1e-5)
 
+    p.add_argument("--search", action="store_true", help="Run hyperparameter search.")
+    p.add_argument("--search_max_runs", type=int, default=8)
+
+    p.add_argument("--search_d_model", type=str, default="64,96")
+    p.add_argument("--search_nhead", type=str, default="4")
+    p.add_argument("--search_num_layers", type=str, default="2,3")
+    p.add_argument("--search_ff_dim", type=str, default="128,192")
+    p.add_argument("--search_dropout", type=str, default="0.2,0.3")
+    p.add_argument("--search_lr", type=str, default="3e-4,5e-4")
+    p.add_argument("--search_weight_decay", type=str, default="1e-4")
+    p.add_argument("--search_pooling", type=str, default="mean,last")
+
     return p.parse_args()
+
+
+def build_search_space(args):
+    d_models = parse_list_arg(args.search_d_model, int)
+    nheads = parse_list_arg(args.search_nhead, int)
+    num_layers = parse_list_arg(args.search_num_layers, int)
+    ff_dims = parse_list_arg(args.search_ff_dim, int)
+    dropouts = parse_list_arg(args.search_dropout, float)
+    lrs = parse_list_arg(args.search_lr, float)
+    weight_decays = parse_list_arg(args.search_weight_decay, float)
+    poolings = parse_list_arg(args.search_pooling, str)
+
+    combos = []
+    for dm, nh, nl, ff, do, lr, wd, pool in itertools.product(
+        d_models, nheads, num_layers, ff_dims, dropouts, lrs, weight_decays, poolings
+    ):
+        if dm % nh != 0:
+            continue
+        use_cls_token = (pool == "cls")
+        combos.append({
+            "d_model": dm,
+            "nhead": nh,
+            "num_layers": nl,
+            "ff_dim": ff,
+            "dropout": do,
+            "lr": lr,
+            "weight_decay": wd,
+            "pooling": pool,
+            "use_cls_token": use_cls_token,
+        })
+
+    combos = combos[: max(1, args.search_max_runs)]
+    return combos
+
+
+def run_single_experiment(
+    run_name: str,
+    cfg: dict,
+    prepared: dict,
+    metadata: dict,
+    x_scaler,
+    y_scaler,
+    args,
+    device,
+    out_dir: Path,
+):
+    train_ds = PM25SequenceDataset(prepared["train"]["X"], prepared["train"]["y"])
+    val_ds = PM25SequenceDataset(prepared["val"]["X"], prepared["val"]["y"])
+    test_ds = PM25SequenceDataset(prepared["test"]["X"], prepared["test"]["y"])
+
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
+    test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False)
+
+    model = TransformerRegressor(
+        input_dim=metadata["n_features"],
+        d_model=cfg["d_model"],
+        nhead=cfg["nhead"],
+        num_layers=cfg["num_layers"],
+        dim_feedforward=cfg["ff_dim"],
+        dropout=cfg["dropout"],
+        pooling=cfg["pooling"],
+        seq_len=args.seq_len,
+        use_cls_token=cfg["use_cls_token"],
+    ).to(device)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="min",
+        factor=args.scheduler_factor,
+        patience=args.scheduler_patience,
+        min_lr=args.min_lr,
+    )
+    criterion = nn.HuberLoss(delta=args.huber_delta) if args.loss == "huber" else nn.L1Loss()
+
+    history = []
+    best_val_rmse = float("inf")
+    best_state = None
+    patience_left = args.patience
+
+    print(f"\n===== Run: {run_name} =====")
+    print(json.dumps(cfg, ensure_ascii=False))
+
+    for epoch in range(1, args.epochs + 1):
+        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
+        val_metrics, _, _ = evaluate(model, val_loader, device, y_scaler, criterion=criterion)
+        scheduler.step(val_metrics["rmse"])
+        current_lr = float(optimizer.param_groups[0]["lr"])
+
+        row = {
+            "run_name": run_name,
+            "epoch": epoch,
+            "lr": current_lr,
+            "train_loss_train_space": train_loss,
+            "val_loss_train_space": val_metrics.get("test_loss_train_space"),
+            "val_mae": val_metrics["mae"],
+            "val_rmse": val_metrics["rmse"],
+            "val_r2": val_metrics["r2"],
+        }
+        history.append(row)
+        print(json.dumps(row), flush=True)
+
+        if val_metrics["rmse"] < best_val_rmse:
+            best_val_rmse = val_metrics["rmse"]
+            best_state = deepcopy(model.state_dict())
+            patience_left = args.patience
+        else:
+            patience_left -= 1
+            if patience_left <= 0:
+                print(f"Early stopping at epoch {epoch}")
+                break
+
+    if best_state is None:
+        raise RuntimeError(f"Training failed for run {run_name}")
+
+    model.load_state_dict(best_state)
+
+    val_metrics, val_preds, val_targets = evaluate(model, val_loader, device, y_scaler, criterion=criterion)
+    test_metrics, test_preds, test_targets = evaluate(model, test_loader, device, y_scaler, criterion=criterion)
+    baseline_metrics = compute_baselines(prepared, metadata, x_scaler)
+
+    test_metrics.update({
+        "n_train": int(prepared["train"]["X"].shape[0]),
+        "n_val": int(prepared["val"]["X"].shape[0]),
+        "n_test": int(prepared["test"]["X"].shape[0]),
+        "seq_len_used": int(args.seq_len),
+        "n_features_numeric": int(metadata["n_features"]),
+        "use_log1p": True,
+        "loss": args.loss,
+        "device": str(device),
+        "baselines": baseline_metrics,
+        **cfg,
+    })
+
+    run_dir = out_dir / run_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    model_path = run_dir / "best_model.pt"
+    history_path = run_dir / "history.json"
+    metrics_path = run_dir / "metrics_transformer.json"
+    pred_path = run_dir / "predictions.npz"
+
+    torch.save(model.state_dict(), model_path)
+    with open(history_path, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2, default=str)
+    np.savez_compressed(
+        pred_path,
+        val_preds=val_preds,
+        val_targets=val_targets,
+        test_preds=test_preds,
+        test_targets=test_targets,
+        test_dates=prepared["test"]["dates"].astype(str),
+        test_regions=prepared["test"]["regions"],
+    )
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json.dump({"metrics": test_metrics, "val_metrics": val_metrics}, f, ensure_ascii=False, indent=2, default=str)
+
+    summary_row = {
+        "run_name": run_name,
+        "val_rmse": val_metrics["rmse"],
+        "val_mae": val_metrics["mae"],
+        "val_r2": val_metrics["r2"],
+        "test_rmse": test_metrics["rmse"],
+        "test_mae": test_metrics["mae"],
+        "test_r2": test_metrics["r2"],
+        "pearson_r": test_metrics["pearson_r"],
+        **cfg,
+    }
+
+    return {
+        "run_name": run_name,
+        "cfg": cfg,
+        "model": model,
+        "test_loader": test_loader,
+        "test_metrics": test_metrics,
+        "val_metrics": val_metrics,
+        "summary_row": summary_row,
+        "model_path": str(model_path),
+        "history_path": str(history_path),
+        "metrics_path": str(metrics_path),
+        "predictions_path": str(pred_path),
+    }
 
 
 def main():
@@ -353,11 +548,11 @@ def main():
     seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    print("\n===== Training Transformer =====")
+    print("\n===== Training/Search Transformer =====")
     print(f"CSV: {csv_path}")
     print(f"Output dir: {out_dir.resolve()}")
     print(f"Device: {device}")
-    print("================================\n")
+    print("======================================\n")
 
     prepared, x_scaler, y_scaler, metadata = prepare_datasets(
         csv_path=str(csv_path),
@@ -383,145 +578,98 @@ def main():
         )
     print()
 
-    train_ds = PM25SequenceDataset(prepared["train"]["X"], prepared["train"]["y"])
-    val_ds = PM25SequenceDataset(prepared["val"]["X"], prepared["val"]["y"])
-    test_ds = PM25SequenceDataset(prepared["test"]["X"], prepared["test"]["y"])
+    joblib.dump(x_scaler, out_dir / "x_scaler.joblib")
+    save_metadata(out_dir, {**metadata, "model": "transformer_search"})
 
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
-    test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False)
+    if args.search:
+        search_space = build_search_space(args)
+    else:
+        search_space = [{
+            "d_model": args.d_model,
+            "nhead": args.nhead,
+            "num_layers": args.num_layers,
+            "ff_dim": args.ff_dim,
+            "dropout": args.dropout,
+            "lr": args.lr,
+            "weight_decay": args.weight_decay,
+            "pooling": args.pooling,
+            "use_cls_token": bool(args.use_cls_token),
+        }]
 
-    model = TransformerRegressor(
-        input_dim=metadata["n_features"],
-        d_model=args.d_model,
-        nhead=args.nhead,
-        num_layers=args.num_layers,
-        dim_feedforward=args.ff_dim,
-        dropout=args.dropout,
-        pooling=args.pooling,
-        seq_len=args.seq_len,
-        use_cls_token=args.use_cls_token,
-    ).to(device)
+    print(f"Total runs to execute: {len(search_space)}")
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer,
-        mode="min",
-        factor=args.scheduler_factor,
-        patience=args.scheduler_patience,
-        min_lr=args.min_lr,
-    )
-    criterion = nn.HuberLoss(delta=args.huber_delta) if args.loss == "huber" else nn.L1Loss()
+    all_results = []
+    best_run = None
+    best_key = None
 
-    history = []
-    best_val_rmse = float("inf")
-    best_state = None
-    patience_left = args.patience
+    for i, cfg in enumerate(search_space, start=1):
+        run_name = f"run_{i:02d}"
+        result = run_single_experiment(
+            run_name=run_name,
+            cfg=cfg,
+            prepared=prepared,
+            metadata=metadata,
+            x_scaler=x_scaler,
+            y_scaler=y_scaler,
+            args=args,
+            device=device,
+            out_dir=out_dir,
+        )
+        all_results.append(result)
 
-    for epoch in range(1, args.epochs + 1):
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-        val_metrics, _, _ = evaluate(model, val_loader, device, y_scaler, criterion=criterion)
-        scheduler.step(val_metrics["rmse"])
-        current_lr = float(optimizer.param_groups[0]["lr"])
+        key = (result["val_metrics"]["rmse"], result["val_metrics"]["mae"])
+        if best_run is None or key < best_key:
+            best_run = result
+            best_key = key
 
-        row = {
-            "epoch": epoch,
-            "lr": current_lr,
-            "train_loss_train_space": train_loss,
-            "val_loss_train_space": val_metrics.get("test_loss_train_space"),
-            "val_mae": val_metrics["mae"],
-            "val_rmse": val_metrics["rmse"],
-            "val_r2": val_metrics["r2"],
-        }
-        history.append(row)
-        print(json.dumps(row), flush=True)
+    if best_run is None:
+        raise RuntimeError("No run completed successfully.")
 
-        if val_metrics["rmse"] < best_val_rmse:
-            best_val_rmse = val_metrics["rmse"]
-            best_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
-            patience_left = args.patience
-        else:
-            patience_left -= 1
-            if patience_left <= 0:
-                print(f"Early stopping at epoch {epoch}")
-                break
+    print("\n===== Best Run =====")
+    print("Run name:", best_run["run_name"])
+    print("Config:", json.dumps(best_run["cfg"], ensure_ascii=False))
+    print("Val metrics:", json.dumps(best_run["val_metrics"], ensure_ascii=False, indent=2))
+    print("Test metrics:", json.dumps(best_run["test_metrics"], ensure_ascii=False, indent=2))
 
-    if best_state is None:
-        raise RuntimeError("Training did not produce a checkpoint.")
-
-    model.load_state_dict(best_state)
-
-    val_metrics, val_preds, val_targets = evaluate(model, val_loader, device, y_scaler, criterion=criterion)
-    test_metrics, test_preds, test_targets = evaluate(model, test_loader, device, y_scaler, criterion=criterion)
-    baseline_metrics = compute_baselines(prepared, metadata, x_scaler)
-
-    test_metrics.update({
-        "n_train": int(prepared["train"]["X"].shape[0]),
-        "n_val": int(prepared["val"]["X"].shape[0]),
-        "n_test": int(prepared["test"]["X"].shape[0]),
-        "seq_len_used": int(args.seq_len),
-        "n_features_numeric": int(metadata["n_features"]),
-        "use_log1p": True,
-        "loss": args.loss,
-        "device": str(device),
-        "d_model": args.d_model,
-        "nhead": args.nhead,
-        "num_layers": args.num_layers,
-        "ff_dim": args.ff_dim,
-        "dropout": args.dropout,
-        "pooling": args.pooling,
-        "use_cls_token": bool(args.use_cls_token),
-        "baselines": baseline_metrics,
-    })
-
+    # permutation importance only for best run
     imp_df = permutation_importance(
-        model=model,
-        loader=test_loader,
+        model=best_run["model"],
+        loader=best_run["test_loader"],
         device=device,
         y_scaler=y_scaler,
         feature_names=metadata.get("feature_columns", [f"f{i}" for i in range(metadata["n_features"])]),
-        criterion=None,
         random_state=args.seed,
     )
 
-    model_path = out_dir / "best_model.pt"
-    history_path = out_dir / "history.json"
-    metrics_path = out_dir / "metrics_transformer.json"
     imp_path = out_dir / "feature_importance_transformer_permutation.csv"
-    pred_path = out_dir / "predictions.npz"
-    summary_path = out_dir / "transformer_summary.json"
-
-    torch.save(model.state_dict(), model_path)
-    joblib.dump(x_scaler, out_dir / "x_scaler.joblib")
-
-    save_metadata(
-        out_dir,
-        {
-            **metadata,
-            "model": "transformer",
-            "best_val_metrics": val_metrics,
-            "test_metrics": test_metrics,
-        },
-    )
-
-    np.savez_compressed(
-        pred_path,
-        val_preds=val_preds,
-        val_targets=val_targets,
-        test_preds=test_preds,
-        test_targets=test_targets,
-        test_dates=prepared["test"]["dates"].astype(str),
-        test_regions=prepared["test"]["regions"],
-    )
-
-    with open(history_path, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2, default=str)
-
     imp_df.to_csv(imp_path, index=False)
 
-    with open(metrics_path, "w", encoding="utf-8") as f:
+    # save ranking table
+    results_df = pd.DataFrame([r["summary_row"] for r in all_results]).sort_values(
+        ["val_rmse", "val_mae"], ascending=[True, True]
+    )
+    results_csv = out_dir / "search_results.csv"
+    results_df.to_csv(results_csv, index=False)
+
+    # copy best model info to top-level files
+    top_metrics_path = out_dir / "metrics_transformer.json"
+    top_summary_path = out_dir / "transformer_summary.json"
+
+    final_metrics = deepcopy(best_run["test_metrics"])
+    final_metrics["importance_path"] = str(imp_path)
+    final_metrics["search_results_path"] = str(results_csv)
+
+    with open(top_metrics_path, "w", encoding="utf-8") as f:
         json.dump(
-            {"metrics": test_metrics, "model_path": str(model_path), "importance_path": str(imp_path)},
+            {
+                "best_run": best_run["run_name"],
+                "best_config": best_run["cfg"],
+                "val_metrics": best_run["val_metrics"],
+                "metrics": final_metrics,
+                "model_path": best_run["model_path"],
+                "importance_path": str(imp_path),
+                "search_results_path": str(results_csv),
+            },
             f,
             ensure_ascii=False,
             indent=2,
@@ -530,34 +678,36 @@ def main():
 
     summary = {
         "created_at": pd.Timestamp.now().isoformat(),
+        "best_run": best_run["run_name"],
+        "best_config": best_run["cfg"],
         "results": {
             "transformer": {
-                "metrics": test_metrics,
-                "model_path": str(model_path),
-                "metrics_path": str(metrics_path),
-                "history_path": str(history_path),
-                "predictions_path": str(pred_path),
+                "val_metrics": best_run["val_metrics"],
+                "metrics": final_metrics,
+                "model_path": best_run["model_path"],
+                "metrics_path": str(top_metrics_path),
+                "history_path": best_run["history_path"],
+                "predictions_path": best_run["predictions_path"],
                 "importance_path": str(imp_path),
+                "search_results_path": str(results_csv),
                 "top_features": imp_df.head(15).to_dict(orient="records"),
             }
         },
     }
-    with open(summary_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2, default=str)
 
-    print("\n[Transformer] Test metrics:", json.dumps(test_metrics, ensure_ascii=False, indent=2))
-    if baseline_metrics:
-        print("\n[Transformer] Baselines on test:")
-        for k, v in baseline_metrics.items():
-            print(f"  - {k}: MAE={v['mae']:.4f}, RMSE={v['rmse']:.4f}, R2={v['r2']:.4f}")
+    with open(top_summary_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False, indent=2, default=str)
 
     print("\n[Transformer] Top 15 features by permutation MAE increase:")
     print(imp_df.head(15).to_string(index=False))
 
-    print(f"\nSaved summary to: {summary_path}")
+    print("\n[Transformer] Search ranking:")
+    print(results_df.to_string(index=False))
+
+    print(f"\nSaved best summary to: {top_summary_path}")
+    print(f"Saved search results to: {results_csv}")
     print(f"Saved outputs to: {out_dir.resolve()}")
 
 
 if __name__ == "__main__":
     main()
-
