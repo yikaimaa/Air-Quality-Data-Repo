@@ -2,7 +2,7 @@ name: workflow_test
 
 on:
   push:
-    branches: [main]
+    branches: [cs2-report]
   pull_request:
 
 jobs:
