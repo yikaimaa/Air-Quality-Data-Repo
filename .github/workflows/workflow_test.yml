@@ -352,11 +352,11 @@ jobs:
         env:
           QUARTO_PYTHON: .venv/bin/python
         run: |
-          quarto render "paper/case study 1 report.qmd" --to pdf
+          quarto render "paper/case study 2 report.qmd" --to pdf
 
       - name: Upload Quarto PDF
         uses: actions/upload-artifact@v4
         with:
-          name: case_study_report_pdf
+          name: case_study_report_2_pdf
           path: paper/*.pdf
           if-no-files-found: error
