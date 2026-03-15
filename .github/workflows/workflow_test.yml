@@ -274,6 +274,46 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
+      # BiLSTM MODEL TRAINING (from model_ready_dataset.csv)
+      # ============================================================
+
+      - name: Train BiLSTM model (CSV-aligned)
+        run: |
+          mkdir -p outputs/bilstm_csv_aligned
+          uv run --no-project python scripts/train_bilstm_modified.py \
+            --csv outputs/model_ready_dataset.csv \
+            --out-dir outputs/bilstm_csv_aligned \
+            --seq-len 14 \
+            --loss huber
+
+      - name: Upload BiLSTM training outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: bilstm_training_outputs
+          path: outputs/bilstm_csv_aligned/
+          if-no-files-found: error
+
+      # ============================================================
+      # TRANSFORMER MODEL TRAINING (from model_ready_dataset.csv)
+      # ============================================================
+
+      - name: Train Transformer model (CSV-aligned)
+        run: |
+          mkdir -p outputs/transformer_csv_aligned
+          uv run --no-project python scripts/train_transformer_modified.py \
+            --csv outputs/model_ready_dataset.csv \
+            --out_dir outputs/transformer_csv_aligned \
+            --seq_len 14 \
+            --loss huber
+
+      - name: Upload Transformer training outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: transformer_training_outputs
+          path: outputs/transformer_csv_aligned/
+          if-no-files-found: error
+
+      # ============================================================
       # RENDER QUARTO REPORT (QMD -> PDF, save to paper/)
       # ============================================================
 
